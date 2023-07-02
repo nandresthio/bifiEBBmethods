@@ -1,0 +1,62 @@
+# Define compiler and compiler flags
+C = gcc
+CC = g++
+CFLAGS = -I C:\Users\nandr\Documents\eigen-3.4.0 -I bifiInstanceAnalysis\cpp_code -std=c++11 -Wall -g
+SUBDIR = bifiInstanceAnalysis\cpp_code
+
+
+main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o surrogate_models.o run_experiments.o
+	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o surrogate_models.o run_experiments.o
+
+main.o: main.cpp run_experiments.hpp
+	$(CC) $(CFLAGS) -c main.cpp 
+
+run_experiments.o: run_experiments.cpp run_experiments.hpp surrogate_models.hpp
+	$(CC) $(CFLAGS) -c run_experiments.cpp 
+
+surrogate_models.o: surrogate_models.cpp surrogate_models.hpp
+	$(CC) $(CFLAGS) -c surrogate_models.cpp
+
+input_output.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)\input_output.cpp
+
+aux_solvers.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)\aux_solvers.cpp
+
+aux_functions.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)\aux_functions.cpp
+
+sample_generator.o: 
+	$(CC) $(CFLAGS) -c $(SUBDIR)\sample_generator.cpp
+
+functions.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)\functions.cpp
+
+#statistics.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/statistics.cpp
+#
+#ap.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/ap.cpp
+#
+#alglibinternal.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibinternal.cpp
+#
+#linalg.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/linalg.cpp
+#
+#specialfunctions.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/specialfunctions.cpp
+#
+#alglibmisc.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibmisc.cpp
+
+#cmaes.o: 
+#	$(C) -Wall -lm -c -o cmaes.o cmaes/src/cmaes.c
+
+#boundary_transformation.o: 
+#	$(C) -Wall -lm -c -o boundary_transformation.o cmaes/src/boundary_transformation.c
+	
+
+
+
+

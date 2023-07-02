@@ -1,0 +1,54 @@
+# Define compiler and compiler flags
+CC = g++
+CFLAGS = -I /usr/local/Cellar/eigen/3.3.9/include/eigen3 -std=c++11 -Wall -g
+
+main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o kriging.o input_output.o ebb_predictor.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o
+	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o kriging.o input_output.o ebb_predictor.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o
+
+main.o: main.cpp input_output.hpp
+	$(CC) $(CFLAGS) -c main.cpp 
+
+ebb_predictor.o: ebb_predictor.cpp ebb_predictor.hpp aux_solvers.hpp functions.hpp kriging.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c ebb_predictor.cpp
+
+input_output.o: input_output.cpp aux_solvers.hpp functions.hpp kriging.hpp libraries.hpp ebb_predictor.hpp input_output.hpp
+	$(CC) $(CFLAGS) -c input_output.cpp
+
+kriging.o: kriging.cpp kriging.hpp functions.hpp sample_generator.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c kriging.cpp
+
+aux_solvers.o: aux_solvers.cpp aux_solvers.hpp functions.hpp sample_generator.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c aux_solvers.cpp
+
+sample_generator.o: sample_generator.cpp sample_generator.hpp aux_functions.hpp functions.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c sample_generator.cpp
+
+functions.o: functions.cpp functions.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c functions.cpp
+
+aux_functions.o: aux_functions.cpp aux_functions.hpp sample_generator.hpp functions.hpp libraries.hpp
+	$(CC) $(CFLAGS) -c aux_functions.cpp
+
+statistics.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/statistics.cpp
+
+ap.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/ap.cpp
+
+alglibinternal.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibinternal.cpp
+
+linalg.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/linalg.cpp
+
+specialfunctions.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/specialfunctions.cpp
+
+alglibmisc.o: 
+	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibmisc.cpp
+
+cmaes.o: 
+	$(C) -Wall -lm -c -o cmaes.o cmaes/src/cmaes.c
+
+boundary_transformation.o: 
+	$(C) -Wall -lm -c -o boundary_transformation.o cmaes/src/boundary_transformation.c

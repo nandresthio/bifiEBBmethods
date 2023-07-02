@@ -1,0 +1,17 @@
+# Compiled Object files
+*.o
+*.exe
+
+# Ignore certain files in the data folder
+/data/features/*.txt
+/data/features/filtering/*.txt
+/data/features/old
+/data/samplePlans/*.txt
+/data/clusterResults
+# Scripts used for unimelb cluster
+/scripts
+# Solar black box simulator, do be downloaded from github to be used
+# Obviously don't want to save it to the repo
+/cpp_code/solar
+# Also do not track benchmarks repo which this code relies on
+/cpp_code/bifiEBBbenchmarks
