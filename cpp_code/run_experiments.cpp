@@ -274,14 +274,14 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 
 
 // Ok so let's define a function for which you supply a name and you get the surrogate model initialised
-SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed){
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo){
 	SurrogateModel* model;
 	if(name.compare("kriging") == 0){
-		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, false);
+		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, printInfo);
 		model = new Kriging(function, auxSolver, seed, true, true);
 		
 	}else if(name.compare("cokriging") == 0){
-		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, false);
+		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, printInfo);
 		model = new CoKriging(function, auxSolver, seed, true, true);
 	
 	}else{
@@ -334,6 +334,7 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 	double performanceError = relativeRootMeanSquaredError(trueVals, modelVals);
 	double performanceCorrelation = weightedCorrelationCoefficient(trueVals, modelVals, oneWeights, false);
 
+	if(printInfo){printf("Completed with model error %.4f and correlation %.4f\n", performanceError, performanceCorrelation);}
 	if(printInfo){printf("Elapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}
 
 	// Store info

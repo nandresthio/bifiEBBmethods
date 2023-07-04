@@ -104,6 +104,12 @@ void SurrogateModel::saveSample(vector<VectorXd> &points, vector<VectorXd> &poin
 	scalePoints(points);
 	scalePoints(pointsLow);
 	scaleTwoObservations(observations, observationsLow);
+	sampledPoints_ = points;
+	sampledPointsLow_ = pointsLow;
+	sampledPointsValues_ = observations;
+	sampledPointsValuesLow_ = observationsLow;
+	
+	
 }
 
 

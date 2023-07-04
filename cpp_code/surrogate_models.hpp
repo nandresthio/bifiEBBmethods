@@ -36,12 +36,12 @@ public:
 
 	void unscaleTwoObservations(vector<double> &observations, vector<double> &observationsLow);
 
-	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
+	virtual void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
 
 	virtual void trainModel();
 
 	// Returns the surrogate surface value at a point
-	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+	virtual double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	vector<double> multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled = false, bool unscaleOutput = true);
 
@@ -102,7 +102,7 @@ class Kriging : public SurrogateModel{
 	tuple<double, double, MatrixXd, LDLT<MatrixXd>, MatrixXd> muSigmaCalculator();
 
 	// Returns the surrogate surface value at a point
-	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true) override;
 
 	// Returns the surrogate surface variance, or uncertainty, at a point
 	double uncertainty(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
@@ -177,7 +177,7 @@ class CoKriging: public Kriging{
 	~CoKriging() override;
 
 	// Override function which also saves data to the low fi krig model
-	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
+	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow) override;
 
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.

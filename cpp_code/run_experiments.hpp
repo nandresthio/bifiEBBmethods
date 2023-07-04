@@ -16,7 +16,7 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFidelityFunction* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo = true);
 
 
-SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed);
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo = true);
 
 void assessSurrogateModelWithFixedSample(string outputFilename, string problemType, string functionName, int highFiBudget, int lowFiBudget, int seed, string method, bool printInfo = true);
 
