@@ -314,12 +314,12 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 	vector<VectorXd> samples;
 	vector<double> trueVals;
 	if(functionName.compare(0, 5, "SOLAR") == 0){
-		// // If we are here, read in the known values; taking a large sample will take forever
-		// string fileLocation = "../solar/points/evaluatedPointsReplaced.txt";
-		// samples = readPointsFromFile(fileLocation, 5000, 5);
-		// fileLocation = "solar/points/evaluatedPointsReplacedValues.txt";
-		// vector<VectorXd> trueVals2 = readPointsFromFile(fileLocation, 5000, 1);
-		// for(int i = 0; i < (int)trueVals2.size(); i++){trueVals.push_back(trueVals2[i](0));}
+		// If we are here, read in the known values; taking a large sample will take forever
+		string fileLocation = "cpp_code/bifiEBBbenchmarks/data/misc/solarPointsLocations.txt";
+		samples = readPointsFromFile(fileLocation, 5000, 5);
+		fileLocation = "cpp_code/bifiEBBbenchmarks/data/misc/solarPointsValues.txt";
+		vector<VectorXd> trueVals2 = readPointsFromFile(fileLocation, 5000, 1);
+		for(int i = 0; i < (int)trueVals2.size(); i++){trueVals.push_back(trueVals2[i](0));}
 	}else{
 		SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, false);
 		samples = sampleGenerator->randomLHS(testSampleSize);

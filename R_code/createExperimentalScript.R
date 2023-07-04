@@ -115,6 +115,8 @@ print("COMPLETED SUBSET SAMPLING SCRIPT.")
 
 # Now want a script for the actual experimental setup
 functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN207.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
+# Add SOLAR instances
+functions <- c(paste0("SOLAR", c("0.10", "0.20", "0.30", "0.40", "0.50", "0.60", "0.70", "0.80", "0.90")))
 features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
 order <- match(functions, features$instances)
 dims <- features[order, 'feature_dimension']
@@ -135,18 +137,15 @@ for(i in 1:length(functions)){
       if(lowFi*dim >= 100){seedsPerRun <- 1}
       else{seedsPerRun <- 40}
       runDataCoKrig <- createScriptStructure(c("surrogateModelWithFixedSample"), c("cokriging"), c(func), highFi*dim, lowFi*dim, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
-      
-      
       if(lowFi != 4 || highFi != 2 || func != functions[[1]]){
         existingRunData <- rbind(existingRunData, runDataKrig, runDataCoKrig)
       }else{
         existingRunData <- rbind(runDataKrig, runDataCoKrig)
       }
-      write.table(runData, "data/runScripts/smallerExpandedTestingRelativeSampleSize.txt", quote = FALSE, row.names = FALSE)
     }
   }
 }
-write.table(runData, "data/runScripts/experimentalRunSurrogateModelWithFixedSample.txt", quote = FALSE, row.names = FALSE)
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithFixedSample.txt", quote = FALSE, row.names = FALSE)
 
 
 
