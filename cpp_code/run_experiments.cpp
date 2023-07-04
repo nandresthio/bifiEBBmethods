@@ -84,7 +84,7 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 		// If here, specifically want to spend the time to find "good" sampling plans, saving them, and then stopping.
 		// Saved the points scaled from 0 to 1!
 		// First check whether this exists or not.
-		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPointsLow = readPointsFromFile(samplePlanFilename, lowFiBudget, function->d_);
 		// If this is empty, the points did not exist and need to create them
 		if(sampledPointsLow.empty()){
@@ -103,7 +103,7 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 			sampleGenerator->prePrint_ = "Generate high fi data sample: ";
 		}
 		// Choose a subset
-		samplePlanFilename = "../data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
 		// Again, if empty need to find them and store them
 		// Always take a MorrisMitchell subset as this is relatively quick eben for large datasets
@@ -117,7 +117,7 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 			printf("Generate high fi data sample: ");
 			sampleGenerator->prePrint_ = "Generate high fi data sample: ";
 		}
-		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
 		if(sampledPoints.empty()){
 			if(printInfo){printf("Did not read sample file, generating sample.\n");}
@@ -195,9 +195,9 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 	// First generate the sample, read it if the file exists
 	if(lowFiBudget > 0){
 		// First try to read both sets
-		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPointsLow = readPointsFromFile(samplePlanFilename, lowFiBudget, function->d_);
-		samplePlanFilename = "../data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
 		
 		// If there is no low fidelity sample, need to choose both samples
@@ -240,7 +240,7 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 		
 	
 	}else{
-		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		samplePlanFilename = "data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
 		if(sampledPoints.empty()){
 			if(printInfo){
