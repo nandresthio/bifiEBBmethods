@@ -7,7 +7,7 @@
 /data/features/filtering/*.txt
 /data/features/old
 /data/samplePlans/*.txt
-/data/clusterResults
+/data/clusterResults/*.txt
 # Scripts used for unimelb cluster
 /scripts
 # Solar black box simulator, do be downloaded from github to be used
