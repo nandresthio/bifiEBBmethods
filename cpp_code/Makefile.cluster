@@ -8,8 +8,8 @@ SUBDIR = bifiEBBbenchmarks/cpp_code
 #main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o surrogate_models.o run_experiments.o
 #	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o surrogate_models.o run_experiments.o
 
-main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
-	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
+main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o hyperparameter_solvers.o
+	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o hyperparameter_solvers.o
 
 main.o: main.cpp run_experiments.hpp
 	$(CC) $(CFLAGS) -c main.cpp 
@@ -19,6 +19,9 @@ run_experiments.o: run_experiments.cpp run_experiments.hpp surrogate_models.hpp
 
 surrogate_models.o: surrogate_models.cpp surrogate_models.hpp
 	$(CC) $(CFLAGS) -c surrogate_models.cpp
+
+hyperparameter_solvers.o: hyperparameter_solvers.hpp hyperparameter_solvers.cpp
+	$(CC) $(CFLAGS) -c hyperparameter_solvers.cpp
 
 input_output.o:
 	$(CC) $(CFLAGS) -c $(SUBDIR)/input_output.cpp
