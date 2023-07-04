@@ -277,12 +277,12 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo){
 	SurrogateModel* model;
 	if(name.compare("kriging") == 0){
-		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, printInfo);
-		model = new Kriging(function, auxSolver, seed, true, true);
+		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, false);
+		model = new Kriging(function, auxSolver, seed, printInfo, true);
 		
 	}else if(name.compare("cokriging") == 0){
-		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, printInfo);
-		model = new CoKriging(function, auxSolver, seed, true, true);
+		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, false);
+		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
 	}else{
 		printf("Problem: Could not match method name!! Stopping here...\n");							

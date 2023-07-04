@@ -6,6 +6,7 @@
 #include "functions.hpp"
 #include "input_output.hpp"
 #include "surrogate_models.hpp"
+#include "hyperparameter_solvers.hpp"
 
 
 void processExperiment(string outputFilename, string instructionLine, bool printInfo = true);

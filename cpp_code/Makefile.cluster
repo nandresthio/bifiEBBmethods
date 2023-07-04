@@ -1,55 +1,65 @@
 # Define compiler and compiler flags
 CC = g++
 C = gcc
-CFLAGS = -I /usr/include/eigen3 -std=c++11 -Wall -g
+CFLAGS = -I /usr/include/eigen3 -I bifiEBBbenchmarks/cpp_code -std=c++11 -Wall -g
+SUBDIR = bifiEBBbenchmarks/cpp_code
 
-main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o kriging.o input_output.o ebb_predictor.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o
-	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o kriging.o input_output.o ebb_predictor.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o
 
-main.o: main.cpp input_output.hpp
+#main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o surrogate_models.o run_experiments.o
+#	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o surrogate_models.o run_experiments.o
+
+main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
+	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
+
+main.o: main.cpp run_experiments.hpp
 	$(CC) $(CFLAGS) -c main.cpp 
 
-ebb_predictor.o: ebb_predictor.cpp ebb_predictor.hpp aux_solvers.hpp functions.hpp kriging.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c ebb_predictor.cpp
+run_experiments.o: run_experiments.cpp run_experiments.hpp surrogate_models.hpp
+	$(CC) $(CFLAGS) -c run_experiments.cpp 
 
-input_output.o: input_output.cpp aux_solvers.hpp functions.hpp kriging.hpp libraries.hpp ebb_predictor.hpp input_output.hpp
-	$(CC) $(CFLAGS) -c input_output.cpp
+surrogate_models.o: surrogate_models.cpp surrogate_models.hpp
+	$(CC) $(CFLAGS) -c surrogate_models.cpp
 
-kriging.o: kriging.cpp kriging.hpp functions.hpp sample_generator.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c kriging.cpp
+input_output.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)/input_output.cpp
 
-aux_solvers.o: aux_solvers.cpp aux_solvers.hpp functions.hpp sample_generator.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c aux_solvers.cpp
+aux_solvers.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)/aux_solvers.cpp
 
-sample_generator.o: sample_generator.cpp sample_generator.hpp aux_functions.hpp functions.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c sample_generator.cpp
+aux_functions.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)/aux_functions.cpp
 
-functions.o: functions.cpp functions.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c functions.cpp
+sample_generator.o: 
+	$(CC) $(CFLAGS) -c $(SUBDIR)/sample_generator.cpp
 
-aux_functions.o: aux_functions.cpp aux_functions.hpp sample_generator.hpp functions.hpp libraries.hpp
-	$(CC) $(CFLAGS) -c aux_functions.cpp
+functions.o:
+	$(CC) $(CFLAGS) -c $(SUBDIR)/functions.cpp
 
-statistics.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/statistics.cpp
+#statistics.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/statistics.cpp
+#
+#ap.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/ap.cpp
+#
+#alglibinternal.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibinternal.cpp
+#
+#linalg.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/linalg.cpp
+#
+#specialfunctions.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/specialfunctions.cpp
+#
+#alglibmisc.o: 
+#	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibmisc.cpp
 
-ap.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/ap.cpp
+#cmaes.o: 
+#	$(C) -Wall -lm -c -o cmaes.o cmaes/src/cmaes.c
 
-alglibinternal.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibinternal.cpp
+#boundary_transformation.o: 
+#	$(C) -Wall -lm -c -o boundary_transformation.o cmaes/src/boundary_transformation.c
+	
 
-linalg.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/linalg.cpp
 
-specialfunctions.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/specialfunctions.cpp
 
-alglibmisc.o: 
-	$(CC) $(CFLAGS) -c alglib-cpp/src/alglibmisc.cpp
 
-cmaes.o: 
-	$(C) -Wall -lm -c -o cmaes.o cmaes/src/cmaes.c
-
-boundary_transformation.o: 
-	$(C) -Wall -lm -c -o boundary_transformation.o cmaes/src/boundary_transformation.c

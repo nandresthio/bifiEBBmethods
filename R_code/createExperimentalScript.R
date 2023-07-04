@@ -115,8 +115,6 @@ print("COMPLETED SUBSET SAMPLING SCRIPT.")
 
 # Now want a script for the actual experimental setup
 functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN207.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
-# Add SOLAR instances
-functions <- c(paste0("SOLAR", c("0.10", "0.20", "0.30", "0.40", "0.50", "0.60", "0.70", "0.80", "0.90")))
 features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
 order <- match(functions, features$instances)
 dims <- features[order, 'feature_dimension']
@@ -131,11 +129,14 @@ for(i in 1:length(functions)){
       #print(paste0("Low ", lowFi, " high ", highFi))
       seedsStart <- 1
       seedsEnd <- 40
-      if(highFi*dim >= 100){seedsPerRun <- 1}
-      else{seedsPerRun <- 40}
+      seedsPerRun <- 40
+      if(highFi*dim >= 100){seedsPerRun <- 5}
+      if(highFi*dim >= 250){seedsPerRun <- 1}
       runDataKrig <- createScriptStructure(c("surrogateModelWithFixedSample"), c("kriging"), c(func), highFi*dim, lowFi*dim, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
-      if(lowFi*dim >= 100){seedsPerRun <- 1}
-      else{seedsPerRun <- 40}
+      
+      seedsPerRun <- 40
+      if(lowFi*dim >= 100){seedsPerRun <- 5}
+      if(lowFi*dim >= 250){seedsPerRun <- 1}
       runDataCoKrig <- createScriptStructure(c("surrogateModelWithFixedSample"), c("cokriging"), c(func), highFi*dim, lowFi*dim, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
       if(lowFi != 4 || highFi != 2 || func != functions[[1]]){
         existingRunData <- rbind(existingRunData, runDataKrig, runDataCoKrig)
@@ -147,6 +148,34 @@ for(i in 1:length(functions)){
 }
 write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithFixedSample.txt", quote = FALSE, row.names = FALSE)
 
+# Do the same with the SOLAR features
+functions <- paste0("SOLAR", c("0.10", "0.20", "0.30", "0.40", "0.50", "0.60", "0.70", "0.80", "0.90"))
+features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
+order <- match(functions, features$instances)
+dims <- features[order, 'feature_dimension']
+for(i in 1:length(functions)){
+  func <- functions[[i]]
+  dim <- dims[[i]]
+  print(func)
+  print(dim)
+  for(lowFi in c(4, 8, 12, 16, 20)){
+    for(highFi in c(2, 4, 6, 8, 10, 12, 14, 16, 18, 20)){
+      if(highFi > lowFi){next}
+      #print(paste0("Low ", lowFi, " high ", highFi))
+      seedsStart <- 1
+      seedsEnd <- 40
+      seedsPerRun <- 10
+      runDataKrig <- createScriptStructure(c("surrogateModelWithFixedSample"), c("kriging"), c(func), highFi*dim, lowFi*dim, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
+      runDataCoKrig <- createScriptStructure(c("surrogateModelWithFixedSample"), c("cokriging"), c(func), highFi*dim, lowFi*dim, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
+      if(lowFi != 4 || highFi != 2 || func != functions[[1]]){
+        existingRunData <- rbind(existingRunData, runDataKrig, runDataCoKrig)
+      }else{
+        existingRunData <- rbind(runDataKrig, runDataCoKrig)
+      }
+    }
+  }
+}
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithFixedSampleSOLAR.txt", quote = FALSE, row.names = FALSE)
 
 
 
