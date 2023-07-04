@@ -29,6 +29,7 @@ TO BE CONTINUED!!
 
 ## To do
  - Add instructions on populating folders `data/samplePlans` from figshare
+ - I think I also want to get the folder `data/features` from figshare, at least for dimensions of functions when creating script
  - Add instruction on adding the bifiEBBbenchmark repo which this code relies on; this should be done with `cd cpp_code` and `git clone https://github.com/nandresthio/bifiEBBbenchmarks.git`
  - Add instructions on adding SOLAR folder if want to use SOLAR instances. Need to make sure function works for linux as well.
     - Call `git clone https://github.com/bbopt/solar.git` from cpp_code

@@ -12,6 +12,15 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 
 void generateAndSaveSample(string outputFilename, string problemType, string functionName, int highFiBudget, int lowFiBudget, int seed, string method, bool printInfo = true);
 
+// Either reads in or generates initial sample. If the sample cannot be read in from the file, a random LHS sample is generated instead.
+pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFidelityFunction* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo = true);
+
+
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed);
+
+void assessSurrogateModelWithFixedSample(string outputFilename, string problemType, string functionName, int highFiBudget, int lowFiBudget, int seed, string method, bool printInfo = true);
+
+
 
 // // Executes the experiment as speficied by "processExperiment". 
 // // double executeExperiment(string filename, string functionName, string technique, int highFiBudget, int lowFiBudget, int seed, double r, vector<double> pVals,
@@ -27,8 +36,6 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 // void generateAndSaveSample(string functionName, int highFiBudget, int lowFiBudget, int seed, bool printInfo);
 
 
-// // Either reads in or generates initial sample. If the sample cannot be read in from the file, a random LHS sample is generated instead.
-// pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(Function* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo);
 
 
 // void plotAndAnalysieFunction(string functionName, int highFiBudget, int lowFiBudget, int seed, bool printInfo, bool scaling = true);

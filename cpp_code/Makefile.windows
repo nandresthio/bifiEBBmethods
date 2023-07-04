@@ -1,12 +1,15 @@
 # Define compiler and compiler flags
 C = gcc
 CC = g++
-CFLAGS = -I C:\Users\nandr\Documents\eigen-3.4.0 -I bifiInstanceAnalysis\cpp_code -std=c++11 -Wall -g
-SUBDIR = bifiInstanceAnalysis\cpp_code
+CFLAGS = -I C:\Users\nandr\Documents\eigen-3.4.0 -I bifiEBBbenchmarks\cpp_code -std=c++11 -Wall -g
+SUBDIR = bifiEBBbenchmarks\cpp_code
 
 
-main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o surrogate_models.o run_experiments.o
-	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o surrogate_models.o run_experiments.o
+#main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o cmaes.o boundary_transformation.o surrogate_models.o run_experiments.o
+#	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o statistics.o ap.o alglibinternal.o linalg.o specialfunctions.o alglibmisc.o boundary_transformation.o cmaes.o surrogate_models.o run_experiments.o
+
+main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
+	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o
 
 main.o: main.cpp run_experiments.hpp
 	$(CC) $(CFLAGS) -c main.cpp 

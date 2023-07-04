@@ -43,7 +43,10 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 				generateAndSaveSample(outputFilename, problemType, functionName, nh, nl, seed, method);
 				if(printInfo){printf("\n");}
 			}else{
-				printf("What??\n");
+				// So here is the whole read in sample, initialise model and assess accuracy
+				if(printInfo){printf("Running seed %d\n", seed);}
+				assessSurrogateModelWithFixedSample(outputFilename, problemType, functionName, nh, nl, seed, method);
+				if(printInfo){printf("\n");}
 			}
 		}
 	}else if(problemType.compare("surrogateModelWithBudget") == 0 || problemType.compare("optimisationWithBudget") == 0){
@@ -176,10 +179,182 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 
 
 
+pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFidelityFunction* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo){
+	clock_t tstart;
+	tstart = clock();
+	string samplePlanFilename;
+	SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
+	// Note will not really use this, just needed when initialising a model
+	AuxSolver* auxSolver = new ARSsolver(function);
+	SurrogateModel* noModel = new SurrogateModel(function, auxSolver, 0, seed, printInfo);
+
+	vector<VectorXd> sampledPoints = {};
+	vector<VectorXd> sampledPointsLow = {};
+	pair<vector<VectorXd>, vector<VectorXd> > points;
+	
+	// First generate the sample, read it if the file exists
+	if(lowFiBudget > 0){
+		// First try to read both sets
+		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
+		sampledPointsLow = readPointsFromFile(samplePlanFilename, lowFiBudget, function->d_);
+		samplePlanFilename = "../data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
+		
+		// If there is no low fidelity sample, need to choose both samples
+		if(sampledPointsLow.empty()){
+			if(printInfo){
+				printf("Generating low fi data sample, choosing random LHS sample, NOT Morris-Mitchell locally optimal.\n");
+				printf("Generate low fi data sample: ");
+				sampleGenerator->prePrint_ = "Generate low fi data sample: ";
+			}
+			sampledPointsLow = sampleGenerator->randomLHS(lowFiBudget);
+			if(printInfo){printf("\n");}
+			noModel->scalePoints(sampledPointsLow);
+			if(printInfo){
+				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
+				printf("Generate high fi data sample: ");
+				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
+			}
+			sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, highFiBudget);
+			if(printInfo){printf("\n");}
+		}else if(sampledPoints.empty()){
+			if(printInfo){
+				printf("Read in sample locations for low fidelity sample only.");
+				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
+				printf("Generate high fi data sample: ");
+				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
+			}
+			sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, highFiBudget);
+			if(printInfo){printf("\n");}
+
+		}else{
+			if(printInfo){
+				printf("Read in sample locations for low and high fidelity samples.");
+				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
+			}
+		}
+
+		// Unscale both samples and return!
+		noModel->unscalePoints(sampledPointsLow);
+		noModel->unscalePoints(sampledPoints);
+		
+	
+	}else{
+		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
+		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
+		if(sampledPoints.empty()){
+			if(printInfo){
+				printf("Generating high fi data sample, choosing random LHS sample, NOT Morris-Mitchell locally optimal.\n");
+				printf("Generate high fi data sample: ");
+				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
+			}
+			sampledPoints = sampleGenerator->randomLHS(highFiBudget);
+			if(printInfo){
+				printf("Read in sample locations for low and high fidelity samples.");
+				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
+			}
+		}else{
+			noModel->unscalePoints(sampledPoints);
+			if(printInfo){
+				printf("Read in sample locations for high fidelity samples.");
+				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
+			}
+		}
+	}
+
+	delete sampleGenerator;
+	delete noModel;
+	delete auxSolver;
+
+	points = make_pair(sampledPoints, sampledPointsLow);
+
+	return points;
+}
+
+
+
+// Ok so let's define a function for which you supply a name and you get the surrogate model initialised
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed){
+	SurrogateModel* model;
+	if(name.compare("kriging") == 0){
+		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, false);
+		model = new Kriging(function, auxSolver, seed, true, true);
+		
+	}else if(name.compare("cokriging") == 0){
+		ARSsolver* auxSolver = new ARSsolver(function, 10, 5000, false, seed, false);
+		model = new CoKriging(function, auxSolver, seed, true, true);
+	
+	}else{
+		printf("Problem: Could not match method name!! Stopping here...\n");							
+		exit(0);
+	}
+
+	return model;
+}
 
 
 
 
+void assessSurrogateModelWithFixedSample(string outputFilename, string problemType, string functionName, int highFiBudget, int lowFiBudget, int seed, string method, bool printInfo){
+	clock_t tstart;
+	tstart = clock();
+	// First initialise function generator and solver
+	BiFidelityFunction* function = processFunctionName(functionName);
+	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, highFiBudget, lowFiBudget, seed, printInfo);
+	vector<VectorXd> sampledPoints = points.first;
+	vector<VectorXd> sampledPointsLow = points.second;
+	vector<double> sampledPointsValues = function->evaluateMany(sampledPoints);
+	vector<double> sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
+	SurrogateModel* model = processModelName(method, function, seed);
+
+	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
+	model->trainModel();
+
+	int testSampleSize = 1000 * function->d_;
+	vector<VectorXd> samples;
+	vector<double> trueVals;
+	if(functionName.compare(0, 5, "SOLAR") == 0){
+		// // If we are here, read in the known values; taking a large sample will take forever
+		// string fileLocation = "../solar/points/evaluatedPointsReplaced.txt";
+		// samples = readPointsFromFile(fileLocation, 5000, 5);
+		// fileLocation = "solar/points/evaluatedPointsReplacedValues.txt";
+		// vector<VectorXd> trueVals2 = readPointsFromFile(fileLocation, 5000, 1);
+		// for(int i = 0; i < (int)trueVals2.size(); i++){trueVals.push_back(trueVals2[i](0));}
+	}else{
+		SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, false);
+		samples = sampleGenerator->randomLHS(testSampleSize);
+		trueVals = function->evaluateMany(samples);
+		delete sampleGenerator;
+	}
+	vector<double> oneWeights(testSampleSize, 1);
+
+	vector<double> modelVals = model->multipleSurfaceValues(samples);
+	double minVal = model->unscaleObservation(*min_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
+	double maxVal = model->unscaleObservation(*max_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
+	double performanceError = relativeRootMeanSquaredError(trueVals, modelVals);
+	double performanceCorrelation = weightedCorrelationCoefficient(trueVals, modelVals, oneWeights, false);
+
+	if(printInfo){printf("Elapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}
+
+	// Store info
+	ofstream outputFile;
+	outputFile.open(outputFilename, ios_base::app);
+	outputFile << problemType << 
+					" " << functionName <<
+					" " << to_string(highFiBudget) << 
+					" " << to_string(lowFiBudget) << 
+					" " << to_string(seed) << 
+					" " << method <<
+					" " << to_string(performanceError).substr(0,10) <<
+					" " << to_string(performanceCorrelation).substr(0,10) <<
+					" " << to_string(minVal).substr(0,10) << 
+					" " << to_string(maxVal).substr(0,10) <<
+					" " << (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) << 
+					"\n";
+
+	outputFile.close();
+	delete function;
+}
 
 
 
@@ -684,193 +859,6 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 // 	// 	return {};
 // }
 
-
-// void generateAndSaveSample(string functionName, int highFiBudget, int lowFiBudget, int seed, bool printInfo){
-// 	clock_t tstart;
-// 	tstart = clock();
-// 	// First initialise function, sample generator, solver and model
-// 	BiFidelityFunction* function = processFunctionName(functionName);
-// 	SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
-// 	// Note will not really use this, just needed when initialising a model
-// 	AuxSolver* auxSolver = new ARSsolver(function);
-// 	Kriging* noModel = new Kriging(function, auxSolver, 0, seed, printInfo);
-// 	vector<VectorXd> sampledPointsLow;
-// 	vector<VectorXd> sampledPoints;
-
-// 	string samplePlanFilename;
-
-// 	if(lowFiBudget > 0){
-// 		if(printInfo){
-// 			printf("Generate low fi data sample: ");
-// 			sampleGenerator->prePrint_ = "Generate low fi data sample: ";
-// 		}
-// 		// If here, specifically want to spend the time to find "good" sampling plans, saving them, and then stopping.
-// 		// Saved the points scaled from 0 to 1!
-// 		// First check whether this exists or not.
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPointsLow = readPointsFromFile(samplePlanFilename, lowFiBudget, function->d_);
-// 		// If this is empty, the points did not exist and need to create them
-// 		if(sampledPointsLow.empty()){
-// 			sampledPointsLow = sampleGenerator->randomLHS(lowFiBudget);
-// 			noModel->scalePoints(sampledPointsLow);
-// 			sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
-// 			writePointsToFile(samplePlanFilename, sampledPointsLow, lowFiBudget, function->d_);
-// 		}
-// 		if(printInfo){
-// 			printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/ 1000);
-// 			printf("Generate high fi data sample: ");
-// 			sampleGenerator->prePrint_ = "Generate high fi data sample: ";
-// 		}
-// 		// Choose a subset
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
-// 		// Again, if empty need to find them and store them
-// 		if(sampledPoints.empty()){
-// 			sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, highFiBudget);
-// 			writePointsToFile(samplePlanFilename, sampledPoints, highFiBudget, function->d_);
-// 		}
-// 	}else{
-// 		if(printInfo){
-// 			printf("Generate high fi data sample: ");
-// 			sampleGenerator->prePrint_ = "Generate high fi data sample: ";
-// 		}
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
-// 		if(sampledPoints.empty()){
-// 			sampledPoints = sampleGenerator->randomLHS(highFiBudget);
-// 			noModel->scalePoints(sampledPoints);
-// 		}
-// 		// Gonna add something here to run a portion of the optimisation, then save it, then repeat until no improvement is found
-// 		// First need to know the current "score" i.e. min distance between a pair of points.
-// 		tuple<double, int, int> info = sampleGenerator->morrisMitchellCriterion(sampledPoints);
-// 		double distance = get<0>(info);
-// 		double nextDistance = distance;
-// 		// No a do while loop
-// 		while(true){
-// 			sampleGenerator->morrisMitchellLocalOptimal(sampledPoints, 100);
-// 			info = sampleGenerator->morrisMitchellCriterion(sampledPoints);
-// 			nextDistance = get<0>(info);
-// 			writePointsToFile(samplePlanFilename, sampledPoints, highFiBudget, function->d_);
-// 			if(abs(distance - nextDistance) > TOL){
-// 				if(printInfo){printf("\nPausing sample optimisation, improved from %.4f to %.4f. Elapsed time since start: %.2f seconds. Saving to file and continuing...\n", distance, nextDistance, (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);}
-// 				// Improved, want to rewrite file to save the current points, then continue
-// 				writePointsToFile(samplePlanFilename, sampledPoints, highFiBudget, function->d_);
-// 				distance = nextDistance;
-// 			}else{
-// 				// Otherwise optimisation is complete, get out of here!
-// 				if(printInfo){printf("\nSample plan is optimised, final min point distance is %.4f.", nextDistance);}
-// 				break;
-// 			}
-// 		}
-			
-		
-// 	}
-// 	if(printInfo){printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);}
-	
-// 	delete sampleGenerator;
-// 	delete noModel;
-// 	delete auxSolver;
-// 	delete function;
-// }
-
-
-
-
-// pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(Function* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo){
-// 	clock_t tstart;
-// 	tstart = clock();
-// 	string samplePlanFilename;
-// 	SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
-// 	// Note will not really use this, just needed when initialising a model
-// 	AuxSolver* auxSolver = new ARSsolver(function);
-// 	Kriging* noModel = new Kriging(function, auxSolver, 0, seed, printInfo);
-
-// 	vector<VectorXd> sampledPoints = {};
-// 	vector<VectorXd> sampledPointsLow = {};
-// 	pair<vector<VectorXd>, vector<VectorXd> > points;
-	
-// 	// First generate the sample, read it if the file exists
-// 	if(lowFiBudget > 0){
-// 		// First try to read both sets
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(lowFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPointsLow = readPointsFromFile(samplePlanFilename, lowFiBudget, function->d_);
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellSubset-dim" + to_string(function->d_) + "-nL" + to_string(lowFiBudget) + "-nH" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
-		
-// 		// If there is no low fidelity sample, need to choose both samples
-// 		if(sampledPointsLow.empty()){
-// 			if(printInfo){
-// 				printf("Generating low fi data sample, choosing random LHS sample, NOT Morris-Mitchell locally optimal.\n");
-// 				printf("Generate low fi data sample: ");
-// 				sampleGenerator->prePrint_ = "Generate low fi data sample: ";
-// 			}
-// 			sampledPointsLow = sampleGenerator->randomLHS(lowFiBudget);
-// 			if(printInfo){printf("\n");}
-// 			noModel->scalePoints(sampledPointsLow);
-// 			if(printInfo){
-// 				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
-// 				printf("Generate high fi data sample: ");
-// 				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
-// 			}
-// 			sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, highFiBudget);
-// 			if(printInfo){printf("\n");}
-// 		}else if(sampledPoints.empty()){
-// 			if(printInfo){
-// 				printf("Read in sample locations for low fidelity sample only.");
-// 				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
-// 				printf("Generate high fi data sample: ");
-// 				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
-// 			}
-// 			sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, highFiBudget);
-// 			if(printInfo){printf("\n");}
-
-// 			// for(int i = 0; i < (int)sampledPoints.size(); i++){
-// 			// 	printPoint(sampledPoints[i]);
-// 			// 	printf("\n");
-// 			// }
-// 		}else{
-// 			if(printInfo){
-// 				printf("Read in sample locations for low and high fidelity samples.");
-// 				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
-// 			}
-// 		}
-
-// 		// Unscale both samples and return!
-// 		noModel->unscalePoints(sampledPointsLow);
-// 		noModel->unscalePoints(sampledPoints);
-		
-	
-// 	}else{
-// 		samplePlanFilename = "../data/samplePlans/morrisMitchellLHS-dim" + to_string(function->d_) + "-n" + to_string(highFiBudget) + "-s" + to_string(seed) + ".txt";
-// 		sampledPoints = readPointsFromFile(samplePlanFilename, highFiBudget, function->d_);
-// 		if(sampledPoints.empty()){
-// 			if(printInfo){
-// 				printf("Generating high fi data sample, choosing random LHS sample, NOT Morris-Mitchell locally optimal.\n");
-// 				printf("Generate high fi data sample: ");
-// 				sampleGenerator->prePrint_ = "Generate high fi data sample: ";
-// 			}
-// 			sampledPoints = sampleGenerator->randomLHS(highFiBudget);
-// 			if(printInfo){
-// 				printf("Read in sample locations for low and high fidelity samples.");
-// 				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
-// 			}
-// 		}else{
-// 			noModel->unscalePoints(sampledPoints);
-// 			if(printInfo){
-// 				printf("Read in sample locations for high fidelity samples.");
-// 				printf("\nElapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000)/1000);
-// 			}
-// 		}
-// 	}
-
-// 	delete sampleGenerator;
-// 	delete noModel;
-// 	delete auxSolver;
-
-// 	points = make_pair(sampledPoints, sampledPointsLow);
-
-// 	return points;
-// }
 
 
 

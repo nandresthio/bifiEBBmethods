@@ -8,20 +8,13 @@
 
 
 
-// Implementation of a Kriging surrogate model of a single source function, which is normally an expensive black box.
-// Includes methods to place down a sample using Latin Hypercube Sampling and the training
-// of its hyperparameters. Uses Accelerated Random Search (ARS) for all auxiliary optimisation problems. 
-// Once an instance of this class has been trained via a call to createSurrogateModel, it can be queried for 
-// surface value and variance (i.e. uncertainty) in the sample space.
-// This implementation follows the details given in the Appendix of 
-// "Bi-fidelity Surrogate Modelling: Showcasing the need for new test instances" by Nicolau Andres-Thio, Mario Andres Munoz and Kate Smith-Miles.
-class Kriging{
-	public:
 
-	Kriging(Function* ebbFunction, AuxSolver* auxSolver, int sampleBudget, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
-	
-	virtual ~Kriging();
+// Ok so what I want is a parent "expensive" surrogate model which defines the common functions
+class SurrogateModel{
+public:
+	SurrogateModel(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
 
+	virtual ~SurrogateModel();
 
 	void scalePoint(VectorXd &point);
 
@@ -39,19 +32,64 @@ class Kriging{
 
 	void unscaleObservations(vector<double> &observations);
 
-	void saveSample(vector<VectorXd> sample, vector<double> sampleVals);
+	void scaleTwoObservations(vector<double> &observations, vector<double> &observationsLow);
 
-	virtual void sampleAtLocation(VectorXd point);
+	void unscaleTwoObservations(vector<double> &observations, vector<double> &observationsLow);
 
-	// Main method which queries the single source function and then trains the Kriging model.
-	void createSurrogateModel();
+	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
 
-	// Method which uses the sample generator to query the source function, using a Latin Hypercube Sampling plan
-	virtual void generateSample();
+	virtual void trainModel();
+
+	// Returns the surrogate surface value at a point
+	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	vector<double> multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled = false, bool unscaleOutput = true);
+
+
+	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
+	AuxSolver* auxSolver_;					// Auxiliary solver used in auxiliary optimisation problems i.e. hyperparameter optimisation.
+	int randomSeed_;						// Random seed stored to allow for reproducible results.
+	bool printInfo_;						// Indicates whether information should be printed as the model is being trained.
+	mt19937 randomGenerator_;				// Random number generator used for various purposes.
+	SampleGenerator* sampleGenerator_;		// Sample generator used when creating sample to train surrogate model.
+	bool functionScaling_;
+	
+	vector<VectorXd> sampledPoints_;		// Points at which the function was sampled, which will be used to train the model.
+	vector<double> sampledPointsValues_;	// Function value at the sampled points.
+	vector<VectorXd> sampledPointsLow_;		// Points at which the function was sampled, which will be used to train the model.
+	vector<double> sampledPointsValuesLow_;	// Function value at the sampled points.
+
+	double maxObservation_;
+	double minObservation_;
+
+	bool trainedModel_;						// bool which indicates whether model has been trained, used in order to assess whether model values can be calculated.
+
+
+};
+
+
+
+
+
+// Implementation of a Kriging surrogate model of a single source function, which is normally an expensive black box.
+// Includes methods to place down a sample using Latin Hypercube Sampling and the training
+// of its hyperparameters. Uses Accelerated Random Search (ARS) for all auxiliary optimisation problems. 
+// Once an instance of this class has been trained via a call to createSurrogateModel, it can be queried for 
+// surface value and variance (i.e. uncertainty) in the sample space.
+// This implementation follows the details given in the Appendix of 
+// "Bi-fidelity Surrogate Modelling: Showcasing the need for new test instances" by Nicolau Andres-Thio, Mario Andres Munoz and Kate Smith-Miles.
+class Kriging : public SurrogateModel{
+	public:
+
+	Kriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+	
+	virtual ~Kriging();
+
+	
 
 	// Main method which trains the Kriging model. Undergoes an auxiliary optimisation to find the best hyperparameters,
 	// then stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel();
+	virtual void trainModel() override;
 
 	// Method which uses ARS to find the best hyperparameter values by maximising the concentrated likelihood function.
 	virtual void trainHyperparameters();
@@ -64,16 +102,16 @@ class Kriging{
 	tuple<double, double, MatrixXd, LDLT<MatrixXd>, MatrixXd> muSigmaCalculator();
 
 	// Returns the surrogate surface value at a point
-	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool scaleOutput = true);
+	double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Returns the surrogate surface variance, or uncertainty, at a point
-	double uncertainty(VectorXd &x, bool pointIsScaled = false, bool scaleOutput = true);
+	double uncertainty(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Returns the expected improvement at a point; assumption is we are minimising
-	double expectedImprovement(VectorXd &x, bool pointIsScaled = false, bool scaleOutput = true);
+	double expectedImprovement(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Returns the surrogate surface value at multiple points
-	vector<double> multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled = false, bool scaleOutput = true);
+	vector<double> multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x);
@@ -99,49 +137,15 @@ class Kriging{
 	};
 
 
-	VectorXd chooseNextSampleSite(string technique);
-
-
-	class nextSampleSiteFunction : public Function{
-		public:
-	
-		nextSampleSiteFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, Kriging* model, string technique);
-
-		~nextSampleSiteFunction();
-
-		virtual double evaluate(VectorXd &point) override;
-
-		Kriging* model_;
-		string technique_;
-
-	};
-
-
-
-
-	Function* ebbFunction_;					// Function for which a surrogate model will be built.
-	AuxSolver* auxSolver_;					// Auxiliary solver used in auxiliary optimisation problems i.e. hyperparameter optimisation.
-	int sampleBudget_;						// Sample size to be used to train the surrogate model.
-	int randomSeed_;						// Random seed stored to allow for reproducible results.
-	bool printInfo_;						// Indicates whether information should be printed as the model is being trained.
-	mt19937 randomGenerator_;				// Random number generator used for various purposes.
-	SampleGenerator* sampleGenerator_;		// Sample generator used when creating sample to train surrogate model.
 	vector<double> theta_;					// First set of d hyperparameters, where d is the problem dimension.
 	vector<double> pVector_;				// Second set of d hyperparameters, where d is the problem dimension.
 
-	vector<VectorXd> sampledPoints_;		// Points at which the function was sampled, which will be used to train the model.
-	vector<double> sampledPointsValues_;	// Function value at the sampled points.
 	double mu_;								// mu value of the surrogate model, stored for speed when calculating surface values.
 	double sigma_;							// sigma value of the surrogate model, stored for speed when calculating surface values.
 	MatrixXd rMatrix_;						// R matrix, stored for speed
 	LDLT<MatrixXd> rMatrixDecomposition_;	// R matrix decomposition, stored for speed instead of the inverse as this is faster.
 	MatrixXd modelWeights_;					// To save time when needing predictions, save the multiplication of the system solved when training the model.
 
-	bool trainedModel_;						// bool which indicates whether model has been trained, used in order to assess whether model values can be calculated.
-	bool functionScaling_;
-
-	double maxObservation_;
-	double minObservation_;
 
 	double maxLogLikelihood_;
 
@@ -168,21 +172,12 @@ class Kriging{
 // "Bi-fidelity Surrogate Modelling: Showcasing the need for new test instances" by Nicolau Andres-Thio, Mario Andres Munoz and Kate Smith-Miles.
 class CoKriging: public Kriging{
 	public:
-	CoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int highFiSampleBudget, int lowFiSampleBudget, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+	CoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
 
 	~CoKriging() override;
 
-	void scaleTwoObservations(vector<double> &observations, vector<double> &observationsLow);
-
-	void unscaleTwoObservations(vector<double> &observations, vector<double> &observationsLow);
-
-	virtual void saveSample(vector<VectorXd> sample, vector<double> sampleVals, vector<VectorXd> sampleLow, vector<double> sampleValsLow);
-
-	virtual void sampleAtLocation(VectorXd point) override;
-
-	// Method which uses the sample generator to query the source function. First puts down a Latin Hypercube Sampling plan,
-	// followed by choosing a subset which is locally maximal in terms of the Morris-Mitchell criterion.
-	void generateSample() override;
+	// Override function which also saves data to the low fi krig model
+	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
 
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
@@ -228,9 +223,9 @@ class CoKriging: public Kriging{
 		CoKriging* cokrigingModel_;
 	};
 
-	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
-	int highFiSampleBudget_;				// Number of samples of the high fidelity source used when training the model.
-	int lowFiSampleBudget_;					// Number of samples of the low fidelity source used when training the model.
+	// BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
+	// int highFiSampleBudget_;				// Number of samples of the high fidelity source used when training the model.
+	// int lowFiSampleBudget_;					// Number of samples of the low fidelity source used when training the model.
 	Kriging* lowFiKriging_;					// Kriging model trained on the low fidelity data. 
 	vector<double> thetaB_;					// Intermediate set of first hyperparameters.
 	vector<double> pBVector_;				// Intermediate set of second hyperparameters.
@@ -249,89 +244,89 @@ class CoKriging: public Kriging{
 
 
 
-// Implementation of CoKriging when the low fidelity function is "cheap", i.e. there is no cost to sample it and is therefore sampled freely.
-class CoKrigingCheap: public Kriging{
-	public:
+// // Implementation of CoKriging when the low fidelity function is "cheap", i.e. there is no cost to sample it and is therefore sampled freely.
+// class CoKrigingCheap: public Kriging{
+// 	public:
 
-	CoKrigingCheap(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int highFiSampleBudget, char mode = 's', int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+// 	CoKrigingCheap(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int highFiSampleBudget, char mode = 's', int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
 
-	~CoKrigingCheap() override;
+// 	~CoKrigingCheap() override;
 
-	void trainHyperparameters() override;
+// 	void trainHyperparameters() override;
 
-	void saveMuSigma() override;
+// 	void saveMuSigma() override;
 
-	tuple<double, double, MatrixXd, LDLT<MatrixXd>> intermediateMuSigmaCalculator();
+// 	tuple<double, double, MatrixXd, LDLT<MatrixXd>> intermediateMuSigmaCalculator();
 
-	double muCalculator(int nL = 10000);
+// 	double muCalculator(int nL = 10000);
 
-	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
+// 	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
 
-	double intermediateConcentratedLikelihoodFunction();
+// 	double intermediateConcentratedLikelihoodFunction();
 	
-	class IntermediateConcentratedLikelihoodFunction : public Function{
-	public:
+// 	class IntermediateConcentratedLikelihoodFunction : public Function{
+// 	public:
 
-		IntermediateConcentratedLikelihoodFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, CoKrigingCheap* cokrigingCheapModel);
+// 		IntermediateConcentratedLikelihoodFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, CoKrigingCheap* cokrigingCheapModel);
 
-		~IntermediateConcentratedLikelihoodFunction();
+// 		~IntermediateConcentratedLikelihoodFunction();
 
-		virtual double evaluate(VectorXd &point) override;
+// 		virtual double evaluate(VectorXd &point) override;
 
-		virtual int betterPoint(VectorXd &point1, double val1, VectorXd &point2, double val2, string flag = "") override; 
+// 		virtual int betterPoint(VectorXd &point1, double val1, VectorXd &point2, double val2, string flag = "") override; 
 
-		CoKrigingCheap* cokrigingCheapModel_;
-	};
+// 		CoKrigingCheap* cokrigingCheapModel_;
+// 	};
 
-	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
-	int highFiSampleBudget_;				// Number of samples of the high fidelity source used when training the model.
-	vector<double> thetaB_;					// Intermediate set of first hyperparameters.
-	vector<double> pBVector_;				// Intermediate set of second hyperparameters.
-	double rho_;							// Multiplier of low fidelity model, also a hyperparameter.
+// 	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
+// 	int highFiSampleBudget_;				// Number of samples of the high fidelity source used when training the model.
+// 	vector<double> thetaB_;					// Intermediate set of first hyperparameters.
+// 	vector<double> pBVector_;				// Intermediate set of second hyperparameters.
+// 	double rho_;							// Multiplier of low fidelity model, also a hyperparameter.
 	
-	double sigmaB_;							// Sigma of the intermediate model.
-	double muIntermediate_;					// Mu of the intermediate model.
-	double mu_;
-	MatrixXd bMatrix_;						
-	LDLT<MatrixXd> bMatrixDecomposition_;	
+// 	double sigmaB_;							// Sigma of the intermediate model.
+// 	double muIntermediate_;					// Mu of the intermediate model.
+// 	double mu_;
+// 	MatrixXd bMatrix_;						
+// 	LDLT<MatrixXd> bMatrixDecomposition_;	
 
-	char mode_;
+// 	char mode_;
 
-};
+// };
 
 
 
-class AdaptiveCoKriging: public CoKriging{
-	public:
-	AdaptiveCoKriging(BiFidelityFunction* biFunction, string strategy, double pFactor, double rFactor, AuxSolver* auxSolver, int highFiSampleBudget, int lowFiSampleBudget, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+// class AdaptiveCoKriging: public CoKriging{
+// 	public:
+// 	AdaptiveCoKriging(BiFidelityFunction* biFunction, string strategy, double pFactor, double rFactor, AuxSolver* auxSolver, int highFiSampleBudget, int lowFiSampleBudget, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
 
-	~AdaptiveCoKriging() override;
+// 	~AdaptiveCoKriging() override;
 
-	void saveSample(vector<VectorXd> sample, vector<double> sampleVals, vector<VectorXd> sampleLow, vector<double> sampleValsLow) override;
+// 	void saveSample(vector<VectorXd> sample, vector<double> sampleVals, vector<VectorXd> sampleLow, vector<double> sampleValsLow) override;
 
-	virtual void sampleAtLocation(VectorXd point) override;
+// 	virtual void sampleAtLocation(VectorXd point) override;
 
-	void chooseReliableLowFidelityData(double p = 0.5, double r = 0.2);
+// 	void chooseReliableLowFidelityData(double p = 0.5, double r = 0.2);
 
-	void trainModel() override;
+// 	void trainModel() override;
 
-	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
+// 	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
 
 		
-	string strategy_;
-	double pFactor_;
-	double rFactor_;
+// 	string strategy_;
+// 	double pFactor_;
+// 	double rFactor_;
 
-	Kriging* highFiKriging_;
+// 	Kriging* highFiKriging_;
 
-	vector<VectorXd> sampledPointsLow_;				// Points at which the function was sampled, which will be used to train the model.
-	vector<double> sampledPointsValuesLow_;			// Function value at the sampled points.
+// 	vector<VectorXd> sampledPointsLow_;				// Points at which the function was sampled, which will be used to train the model.
+// 	vector<double> sampledPointsValuesLow_;			// Function value at the sampled points.
 
-	vector<VectorXd> usedSampledPointsLow_;			// Points which have been chosen as "trustworthy" by the selection process to train a low kriging model.
-	vector<double> usedSampledPointsValuesLow_; 	// Low fi values at the chosen points.
+// 	vector<VectorXd> usedSampledPointsLow_;			// Points which have been chosen as "trustworthy" by the selection process to train a low kriging model.
+// 	vector<double> usedSampledPointsValuesLow_; 	// Low fi values at the chosen points.
 
-	bool onlyUseHighFiData_;						// Bool on whether all low fi data has been discarded.
-};
+// 	bool onlyUseHighFiData_;						// Bool on whether all low fi data has been discarded.
+// };
 
 
 #endif
