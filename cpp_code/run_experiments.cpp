@@ -310,9 +310,6 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
 	model->trainModel();
 
-	printPoint(sampledPoints[0]);
-	printf("\n");
-
 	int testSampleSize = 1000 * function->d_;
 	vector<VectorXd> samples;
 	vector<double> trueVals;
@@ -324,17 +321,20 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 		vector<VectorXd> trueVals2 = readPointsFromFile(fileLocation, 5000, 1);
 		for(int i = 0; i < (int)trueVals2.size(); i++){trueVals.push_back(trueVals2[i](0));}
 	}else{
-		printf("Seed %d size %d\n", seed, testSampleSize);
-		SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, false);
-		samples = sampleGenerator->randomLHS(testSampleSize);
+		// Read in large sample plan for reproducibility
+		string fileLocation = "data/samplePlans/LHS-dim" + to_string(function->d_) + "-n" + to_string(testSampleSize) + ".txt";
+		samples = readPointsFromFile(fileLocation, testSampleSize, function->d_);
+		// If the points were not read in, generate them
+		if((int)samples.size() == 0){
+			if(printInfo){printf("Could not read in pre-generated large sample, generating it instead!\n");}
+			SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, false);
+			samples = sampleGenerator->randomLHS(testSampleSize);
+			delete sampleGenerator;
+		}
 		trueVals = function->evaluateMany(samples);
-		delete sampleGenerator;
+		
 	}
 	vector<double> oneWeights(testSampleSize, 1);
-
-	printPoint(samples[0]);
-	printf("\n");
-
 	vector<double> modelVals = model->multipleSurfaceValues(samples);
 	double minVal = model->unscaleObservation(*min_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
 	double maxVal = model->unscaleObservation(*max_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
