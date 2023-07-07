@@ -9,7 +9,7 @@
 /data/samplePlans/*.txt
 /data/clusterResults/*.txt
 # Scripts used for unimelb cluster
-/scripts
+# /scripts
 # Solar black box simulator, do be downloaded from github to be used
 # Obviously don't want to save it to the repo
 /cpp_code/solar
