@@ -12,6 +12,7 @@
 # module load eigen/3.3.8
 # # Move into folder and run
 
+cd ..
 ./cpp_code/main experimentalRunSurrogateModelWithFixedSample ${SLURM_ARRAY_TASK_ID} 20
 
 
