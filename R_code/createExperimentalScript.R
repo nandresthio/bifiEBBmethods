@@ -114,7 +114,7 @@ print("COMPLETED SUBSET SAMPLING SCRIPT.")
 
 
 # Now want a script for the actual experimental setup
-functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN207.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
+functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN312.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
 features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
 order <- match(functions, features$instances)
 dims <- features[order, 'feature_dimension']

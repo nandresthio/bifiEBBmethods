@@ -299,7 +299,14 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 	clock_t tstart;
 	tstart = clock();
 	// First initialise function generator and solver
-	BiFidelityFunction* function = processFunctionName(functionName);
+	BiFidelityFunction* function;
+	// Have an extra line here for SOLAR instances, to add a unique file name to the end of the instance name
+	if(functionName.compare(0, 5, "SOLAR") == 0){
+		string appendedName = functionName + to_string(highFiBudget) + to_string(lowFiBudget) + to_string(seed);
+		function = processFunctionName(appendedName);	
+	}else{
+		function = processFunctionName(functionName);
+	}
 	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, highFiBudget, lowFiBudget, seed, printInfo);
 	vector<VectorXd> sampledPoints = points.first;
 	vector<VectorXd> sampledPointsLow = points.second;
