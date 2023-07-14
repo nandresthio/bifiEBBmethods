@@ -331,6 +331,7 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 		// Read in large sample plan for reproducibility
 		string fileLocation = "data/samplePlans/LHS-dim" + to_string(function->d_) + "-n" + to_string(testSampleSize) + ".txt";
 		samples = readPointsFromFile(fileLocation, testSampleSize, function->d_);
+		unscalePoints(samples, function);
 		// If the points were not read in, generate them
 		if((int)samples.size() == 0){
 			if(printInfo){printf("Could not read in pre-generated large sample, generating it instead!\n");}

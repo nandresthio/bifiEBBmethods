@@ -15,3 +15,9 @@
 /cpp_code/solar
 # Also do not track benchmarks repo which this code relies on
 /cpp_code/bifiEBBbenchmarks
+# Adding matlab folder which I don't want in the repo
+matlab_code
+MatlabServer.m
+/data/isaMetadata/
+.Rhistory
+InputStreamByteWrapper.class
