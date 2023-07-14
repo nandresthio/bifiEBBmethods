@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-2890
+#SBATCH --array=1-5780
 # Load the required modules
 # module load gcccore/10.2.0
 # module load cmake/3.18.4
@@ -13,7 +13,7 @@
 # # Move into folder and run
 
 cd ..
-./cpp_code/main experimentalRunSurrogateModelWithFixedSample ${SLURM_ARRAY_TASK_ID} 20
+./cpp_code/main experimentalRunSurrogateModelWithFixedSample ${SLURM_ARRAY_TASK_ID} 10
 
 
 
