@@ -1,3 +1,27 @@
+// ######################################################################################
+
+// # Copyright 2023, Nicolau Andrés-Thió
+
+// # Permission is hereby granted, free of charge, to any person obtaining a copy
+// # of this software and associated documentation files (the "Software"), to deal
+// # in the Software without restriction, including without limitation the rights
+// # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// # copies of the Software, and to permit persons to whom the Software is
+// # furnished to do so, subject to the following conditions:
+
+// # The above copyright notice and this permission notice shall be included in all
+// # copies or substantial portions of the Software.
+
+// # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// # SOFTWARE.
+
+// ######################################################################################
+
 #ifndef SURROGATE_MODELS_CPP
 #define SURROGATE_MODELS_CPP
 
@@ -64,7 +88,7 @@ void SurrogateModel::unscalePoints(vector<VectorXd> &points){
 double SurrogateModel::scaleObservation(double value){
 	if(!functionScaling_){return value;}
 	if(maxObservation_ == DBL_MAX || minObservation_ == DBL_MAX){
-		printf("Asking to scale observations without having had the model scale them first! Stopping now...\n");
+		printf("Asking to scale observations without having had the model find the fmin and fmax first! Stopping now...\n");
 		exit(0);
 	}
 	if(abs(maxObservation_ - minObservation_) < TOL){return value - minObservation_;}
@@ -270,7 +294,6 @@ double Kriging::uncertainty(VectorXd &x, bool pointIsScaled, bool unscaleOutput)
 	return var;
 }
 
-// NEED TO DEFINE FMIN IN THE RIGHT PLACE!!
 double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
 	VectorXd xCopy = x;
 	if(!pointIsScaled){scalePoint(xCopy);}
@@ -295,13 +318,6 @@ double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscal
 
 }
 
-vector<double> Kriging::multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled, bool scaleOutput){
-	vector<double> values((int)points.size(), 0.0);
-	for(int i = 0; i < (int)points.size(); i++){
-		values[i] = surfaceValue(points[i], pointIsScaled, scaleOutput);
-	}
-	return values;
-}
 
 tuple<double, double> Kriging::meanVarianceCalculator(VectorXd &x){
 	int n = (int)sampledPoints_.size();
@@ -323,22 +339,6 @@ tuple<double, double> Kriging::meanVarianceCalculator(VectorXd &x){
 	if(n == 1){s_x = mu_;}
 	MatrixXd var_mid = r.transpose() * rMatrixDecomposition_.solve(r);
 	double variance = sigma_ * (1 - var_mid(0,0));
-
-	// VectorXd one(n);
-	// VectorXd y(n);
-	// for(int i = 0; i < n; i++){
-	// 	one(i) = 1;
-	// 	y(i) = sampledPointsValues_[i];
-	// }
-	// VectorXd rightHandSide = r.transpose() * rMatrixDecomposition_.solve(y - one*mu_);
-	// double s_x = mu_ + rightHandSide(0);
-	// if(n == 1){s_x = mu_;}
-	// MatrixXd var_mid = r.transpose() * rMatrixDecomposition_.solve(r);
-	// // Commenting this out as it is not used in practice apparently
-	// // MatrixXd var_top_right = one.transpose() * rMatrixDecomposition_.solve(r);
-	// // MatrixXd var_bottom_right = one.transpose() * rMatrixDecomposition_.solve(one);
-	// // double variance = sigma_ * (1 - var_mid(0,0) + (1 - var_top_right(0,0))*(1 - var_top_right(0,0))/var_bottom_right(0,0));
-	// double variance = sigma_ * (1 - var_mid(0,0));
 	
 	return make_tuple(s_x, variance);
 }
@@ -358,59 +358,8 @@ double Kriging::concentratedLikelihoodFunction(){
 	}
 
 
-	// Adding an extra check, in case of numerical errors. That is, if sigma is small enough to potentially lead 
-	// to numerical errors, ignore it
-	// if(get<1>(data) < TOL){return -DBL_MAX;}
-
-	// Same with R being the identity, if it is too close to the identity ignore it
-	// This is done so that something very close to the identity can still be found, but anything "closer" to it
-	// which lead to an almost identical model is ignored
-	// MatrixXd rMatrix = get<2>(data);
-	// bool isIdentity = true;
-	// for(int i = 0; isIdentity && i < rMatrix.rows(); i++){
-	// 	for(int j = i + 1; isIdentity && j < rMatrix.cols(); j++){
-	// 		if(rMatrix(i,j) > 0.001){
-	// 			isIdentity = false;
-	// 		}
-	// 	}
-	// }
-	// if(isIdentity){return -DBL_MAX;}
-
-	// Instead of the above, we are going to say that if the determinant of R is 0.999, it is assumed to be the identity, so nothing larger that 0.999 is allowed. 
-	// This should lead to a log likelihood not impacted by the determinant of R, since 0 > log |R| > -0.000435 for |R| > 0.999
-	// MatrixXd rMatrix = get<2>(data);
-	// if(rMatrix.determinant() > 0.999){return -DBL_MAX;}
-
-	// double sanityCheck = -n * log(get<1>(data))/2 - log(get<2>(data).determinant())/2;
-	// if(abs(sanityCheck - logLikelihood) > 0.001){printf("Sanity check did not pass! %.3f vs %.3f\n", sanityCheck, logLikelihood);}
 	return logLikelihood;
 }
-
-
-// void Kriging::sampleAtLocation(VectorXd point){
-// 	// First of all scale the point
-// 	scalePoint(point);
-// 	// First check that the point is not repeated
-// 	bool isRepeated = checkIfRepeated(sampledPoints_, point);
-// 	if(isRepeated){
-// 		printf("Not saving point as it is already used by the model!\n");
-// 		return;
-// 	}
-// 	// If here, can save the point, and get the objective function value
-// 	sampledPoints_.push_back(point);
-// 	unscalePoint(point);
-// 	double pointVal = ebbFunction_->evaluate(point);
-// 	scalePoint(point);
-// 	// If the value is outside of the range seen so far need to rescale all of the value. Otherwise can just scale and forget about it
-// 	if(pointVal < minObservation_ || pointVal > maxObservation_){
-// 		unscaleObservations(sampledPointsValues_);
-// 		sampledPointsValues_.push_back(pointVal);
-// 		scaleObservations(sampledPointsValues_);
-// 	}else{
-// 		pointVal = scaleObservation(pointVal);
-// 		sampledPointsValues_.push_back(pointVal);
-// 	}
-// }
 
 
 Kriging::ConcentratedLikelihoodFunction::ConcentratedLikelihoodFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, Kriging* krigingModel):
@@ -771,24 +720,6 @@ double CoKriging::intermediateConcentratedLikelihoodFunction(){
 		maxLogLikelihood_ = logLikelihood;
 	}
 
-	// We are going to say that if the determinant of b is 0.999, it is assumed to be the identity, so nothing larger that 0.999 is allowed. 
-	// This should lead to a log likelihood not impacted by the determinant of b, since 0 > log |b| > -0.000435 for |b| > 0.999
-	// MatrixXd bMatrix = get<2>(data);
-	// if(bMatrix.determinant() > 0.999){return -DBL_MAX;}
-
-	// Same with R being the identity, if it is too close to the identity ignore it
-	// This is done so that something very close to the identity can still be found, but anything "closer" to it
-	// which lead to an almost identical model is ignored
-	// MatrixXd bMatrix = get<2>(data);
-	// bool isIdentity = true;
-	// for(int i = 0; isIdentity && i < bMatrix.rows(); i++){
-	// 	for(int j = i + 1; isIdentity && j < bMatrix.cols(); j++){
-	// 		if(bMatrix(i,j) > 0.001){
-	// 			isIdentity = false;
-	// 		}
-	// 	}
-	// }
-	// if(isIdentity){return -DBL_MAX;}
 	return logLikelihood;
 }
 
@@ -920,7 +851,7 @@ int CoKriging::IntermediateConcentratedLikelihoodFunction::betterPoint(VectorXd 
 
 
 
-
+// CODE BELOW IS UNDER DEVELOPMENT!
 
 
 

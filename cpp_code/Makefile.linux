@@ -23,10 +23,10 @@
 ######################################################################################
 
 # Define compiler and compiler flags
-C = gcc
 CC = g++
-CFLAGS = -I C:\Users\nandr\Documents\eigen-3.4.0 -I bifiEBBbenchmarks\cpp_code -std=c++11 -Wall -g
-SUBDIR = bifiEBBbenchmarks\cpp_code
+C = gcc
+CFLAGS = -I /usr/include/eigen3 -I bifiEBBbenchmarks/cpp_code -std=c++11 -Wall -g
+SUBDIR = bifiEBBbenchmarks/cpp_code
 
 main: main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o hyperparameter_solvers.o
 	$(CC) $(CFLAGS) -o main main.o aux_solvers.o functions.o sample_generator.o aux_functions.o input_output.o surrogate_models.o run_experiments.o hyperparameter_solvers.o
@@ -44,19 +44,22 @@ hyperparameter_solvers.o: hyperparameter_solvers.hpp hyperparameter_solvers.cpp
 	$(CC) $(CFLAGS) -c hyperparameter_solvers.cpp
 
 input_output.o:
-	$(CC) $(CFLAGS) -c $(SUBDIR)\input_output.cpp
+	$(CC) $(CFLAGS) -c $(SUBDIR)/input_output.cpp
 
 aux_solvers.o:
-	$(CC) $(CFLAGS) -c $(SUBDIR)\aux_solvers.cpp
+	$(CC) $(CFLAGS) -c $(SUBDIR)/aux_solvers.cpp
 
 aux_functions.o:
-	$(CC) $(CFLAGS) -c $(SUBDIR)\aux_functions.cpp
+	$(CC) $(CFLAGS) -c $(SUBDIR)/aux_functions.cpp
 
 sample_generator.o: 
-	$(CC) $(CFLAGS) -c $(SUBDIR)\sample_generator.cpp
+	$(CC) $(CFLAGS) -c $(SUBDIR)/sample_generator.cpp
 
 functions.o:
-	$(CC) $(CFLAGS) -c $(SUBDIR)\functions.cpp
+	$(CC) $(CFLAGS) -c $(SUBDIR)/functions.cpp
+
+
+
 
 
 

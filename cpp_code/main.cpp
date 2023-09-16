@@ -1,3 +1,27 @@
+// ######################################################################################
+
+// # Copyright 2023, Nicolau Andrés-Thió
+
+// # Permission is hereby granted, free of charge, to any person obtaining a copy
+// # of this software and associated documentation files (the "Software"), to deal
+// # in the Software without restriction, including without limitation the rights
+// # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// # copies of the Software, and to permit persons to whom the Software is
+// # furnished to do so, subject to the following conditions:
+
+// # The above copyright notice and this permission notice shall be included in all
+// # copies or substantial portions of the Software.
+
+// # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// # SOFTWARE.
+
+// ######################################################################################
+
 #ifndef MAIN_CPP
 #define MAIN_CPP
 
@@ -5,9 +29,68 @@
 #include "run_experiments.hpp"
 
 
-
-// WHAT I WANT THE MAIN FUNCTION TO END UP LOOKING LIKE!
 int main(int argc, char *argv[]){
+	if(argc == 1){
+		// If no inputs are given, show some examples on how to run this code
+		printf("Note: This code is intended to run based on experiment information.\n");
+		printf("Example run files are stored in data/runScripts. For formatting details,\n");
+		printf("consult cpp_code/run_experiments.hpp In order to run an experiment please\n");
+		printf("specify file containing information run, followed by ROWSTART, NUMROWS, ROWADD, with:\n\n");
+		printf("\t-ROWSTART: Row of the first experiment to run in the run file.\n");
+		printf("\t-NUMROWS: (Optional) Number of experiments to run, default is 1.\n");
+		printf("\t-ROWADD: (Optional) Addition to ROWSTART, needed when running experiments in the SPARTAN cluster.\n\n");
+		printf("The experiments in the specified which will run will go from line ROWADD + (ROWSTART - 1) * NUMROWS + 1 to line ROWADD + ROWSTART * NUMROWS\n\n");
+		printf("Example run: main sampleCreationRun 1 10\n\n");
+
+
+		string functionName = "ToalBranin0.10";
+		string modelName = "cokriging";
+		int seed = 1;
+		int highFiBudget = 10;
+		int lowFiBudget = 20;
+		bool printInfo = true;
+
+		printf("Next an example on how to use this code is given. The function %s is modelledby the surrogate model %s\n", functionName.c_str(),modelName.c_str()); 
+		printf("using %d high-fidelity samples, %d low-fidelity samples, and the random seed %d\n", highFiBudget, lowFiBudget, seed);
+		
+		// This line creates a bifidelity function class which can be queried for both high and low fidelity function values
+		BiFidelityFunction* function = processFunctionName(functionName);
+		
+		// This line creates a surrogate model based on the function, currently the strings "kriging" and "cokriging" are supported
+		// Setting a non-zero seed allows reproducible results.
+		SurrogateModel* model = processModelName(modelName, function, seed);
+
+		// The following code reads in an already generated sample, or if a file with these details does not exist,
+		// one is generated
+		printf("Obtain sample.\n");
+		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, highFiBudget, lowFiBudget, seed, printInfo);
+		// The next few lines extract the sample and obtain the high- and low-fidelity objective function values
+		vector<VectorXd> sampledPoints = points.first;
+		vector<VectorXd> sampledPointsLow = points.second;
+		vector<double> sampledPointsValues = function->evaluateMany(sampledPoints);
+		vector<double> sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
+
+		// The next two lines save the sample to the model, and train the hyperparameters
+		model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
+		printf("\nTrain model.\n");
+		model->trainModel();
+
+
+		// Generate a large sample to assess model accuracy
+		printf("\nObtain large sample to measure model accuracy.\n");
+		SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
+		vector<VectorXd> testPoints = sampleGenerator->randomLHS(1000);
+		vector<double> testPointsValues = function->evaluateMany(testPoints);
+
+		vector<double> oneWeights(1000, 1);
+		vector<double> modelVals = model->multipleSurfaceValues(testPoints);
+		double performanceError = relativeRootMeanSquaredError(testPointsValues, modelVals);
+		double performanceCorrelation = weightedCorrelationCoefficient(testPointsValues, modelVals, oneWeights, false);
+
+		printf("\nTrained model has an error of %.2f and a correlation of %.4f with the true function.\n\n", performanceError, performanceCorrelation);
+		return 0;
+	}
+
 
 	if(argc < 3 || argc > 5){
 		printf("Error: Please specify file containing information run, followed by ROWSTART, NUMROWS, ROWADD, with:\n\n");
@@ -18,6 +101,8 @@ int main(int argc, char *argv[]){
 		printf("Example run: main sampleCreationRun 1 10\n\n");
 		return 0;
 	}
+
+
 	string filename = argv[1];
 	int indexNum = stoi(argv[2]);
 	int indexMult, indexAdd;

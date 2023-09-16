@@ -21,3 +21,5 @@ MatlabServer.m
 /data/isaMetadata/
 .Rhistory
 InputStreamByteWrapper.class
+# Don't want the scripts for the cluster
+scripts

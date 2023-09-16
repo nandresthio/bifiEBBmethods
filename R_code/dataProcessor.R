@@ -19,10 +19,10 @@ combineArrayResults <- function(runName, arrayStart, arrayEnd, jobsPerArray = 1,
       next
     }
     newData <- read.table(filename, header = TRUE, sep = " ", fill = TRUE)
-    # if(nrow(newData) != 200 & nrow(newData) != 10){
-    #   print(paste0("Weird, for this file have ", nrow(newData), " rows instead of 10 or 200!"))
-    #   print(filename)
-    # }
+    if(nrow(newData) != 1200 & nrow(newData) != 50){
+      print(paste0("Weird, for this file have ", nrow(newData), " rows instead of 50 or 1200!"))
+      print(filename)
+    }
     combinedData <- rbind.fill(combinedData, newData)
   }
   if(printInfo){cat(" - done.\n")}
@@ -56,11 +56,15 @@ augmentData <- function(experimentalData, featuresData, algorithms){
   }
   finalData[, colnames(relevantSampleFeatureData)] <- relevantSampleFeatureData
   # Finally add source
-  finalData$Source <- "Fixed"
-  finalData[str_which(finalData$instances, "Wang", negate = FALSE), "Source"] = "Error-based"
-  finalData[str_which(finalData$instances, "COCO", negate = FALSE), "Source"] = "COCO-Disturbance-based"
-  finalData[str_which(finalData$instances, "Disturbance", negate = FALSE), "Source"] = "Lit-Disturbance-based"
-  finalData[str_which(finalData$instances, "Toal", negate = FALSE), "Source"] = "Parameter-based"
+  # finalData$Source <- "Fixed"
+  # finalData[str_which(finalData$instances, "Wang", negate = FALSE), "Source"] = "Error-based"
+  # finalData[str_which(finalData$instances, "COCO", negate = FALSE), "Source"] = "COCO-Disturbance-based"
+  # finalData[str_which(finalData$instances, "Disturbance", negate = FALSE), "Source"] = "Lit-Disturbance-based"
+  # finalData[str_which(finalData$instances, "Toal", negate = FALSE), "Source"] = "Parameter-based"
+  # finalData[str_which(finalData$instances, "SOLAR", negate = FALSE), "Source"] = "SOLAR"
+  finalData$Source <- "Literature"
+  finalData[c(str_which(finalData$instances, "COCO", negate = FALSE),
+              str_which(finalData$instances, "Disturbance", negate = FALSE)), "Source"] = "Disturbance-based"
   finalData[str_which(finalData$instances, "SOLAR", negate = FALSE), "Source"] = "SOLAR"
   return(finalData)
 }
@@ -71,8 +75,11 @@ condenseData <- function(data, algorithms){
   instances <- unique(paste0(gsub("[(]", "", sapply(split, "[[", 1)), ",", sapply(split, "[[", 2), ",", sapply(split, "[[", 3)))
   
   featNames <- colnames(data[, str_which(colnames(data), "feature_")])
-  colnames <- c("instances", "Source", paste0(algorithms, "_corrWilcoxon"), paste0(algorithms, "_corrMean"), paste0(algorithms, "_corrMedian"),
-                            paste0(algorithms, "_errorWilcoxon"), paste0(algorithms, "_errorMean"), paste0(algorithms, "_errorMedian"), featNames)
+  colnames <- c("instances", "Source", 
+                paste0(algorithms, "_corrWilcoxon0"), paste0(algorithms, "_corrWilcoxon0.001"), paste0(algorithms, "_corrWilcoxon0.0025"), paste0(algorithms, "_corrWilcoxon0.005"), paste0(algorithms, "_corrWilcoxon0.01"),
+                paste0(algorithms, "_corrMean"), paste0(algorithms, "_corrMedian"),
+                paste0(algorithms, "_errorWilcoxon0"), paste0(algorithms, "_errorWilcoxon0.001"), paste0(algorithms, "_errorWilcoxon0.0025"), paste0(algorithms, "_errorWilcoxon0.005"), paste0(algorithms, "_errorWilcoxon0.01"),
+                paste0(algorithms, "_errorMean"), paste0(algorithms, "_errorMedian"), featNames)
   output <- setNames(data.frame(matrix(ncol = length(colnames), nrow = 0)), colnames)
   row <- 0
   for(instance in unique(instances)){
@@ -80,7 +87,7 @@ condenseData <- function(data, algorithms){
     cat(paste0("\rWorking on row ", row))
     tempData <- data[str_which(data$instance, instance), ]
     if(nrow(tempData) != 40){
-      print(paste0("Something weird with instance ", instance, ", have ", nrow(tempData), " rows instead of 80!"))
+      print(paste0("Something weird with instance ", instance, ", have ", nrow(tempData), " rows instead of 40!"))
     }
     output[row, "instances"] <- instance
     output[row, "Source"] <- tempData[1, "Source"]
@@ -91,14 +98,65 @@ condenseData <- function(data, algorithms){
     }
     
     hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, paired = TRUE, alternative = "less")
-    output[row, "kriging_corrWilcoxon"] <- hypSame$p.value
+    output[row, "kriging_corrWilcoxon0"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, paired = TRUE, alternative = "less")
-    output[row, "cokriging_corrWilcoxon"] <- hypSame$p.value
+    output[row, "cokriging_corrWilcoxon0"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.001, paired = TRUE, alternative = "less")
+    output[row, "kriging_corrWilcoxon0.001"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.001, paired = TRUE, alternative = "less")
+    output[row, "cokriging_corrWilcoxon0.001"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.0025, paired = TRUE, alternative = "less")
+    output[row, "kriging_corrWilcoxon0.0025"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.0025, paired = TRUE, alternative = "less")
+    output[row, "cokriging_corrWilcoxon0.0025"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.005, paired = TRUE, alternative = "less")
+    output[row, "kriging_corrWilcoxon0.005"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.005, paired = TRUE, alternative = "less")
+    output[row, "cokriging_corrWilcoxon0.005"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.01, paired = TRUE, alternative = "less")
+    output[row, "kriging_corrWilcoxon0.01"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.01, paired = TRUE, alternative = "less")
+    output[row, "cokriging_corrWilcoxon0.01"] <- hypSame$p.value
+    
     
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, paired = TRUE, alternative = "g")
-    output[row, "kriging_errorWilcoxon"] <- hypSame$p.value
+    output[row, "kriging_errorWilcoxon0"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, paired = TRUE, alternative = "g")
-    output[row, "cokriging_errorWilcoxon"] <- hypSame$p.value
+    output[row, "cokriging_errorWilcoxon0"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.001, paired = TRUE, alternative = "g")
+    output[row, "kriging_errorWilcoxon0.001"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.001, paired = TRUE, alternative = "g")
+    output[row, "cokriging_errorWilcoxon0.001"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.0025, paired = TRUE, alternative = "g")
+    output[row, "kriging_errorWilcoxon0.0025"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.0025, paired = TRUE, alternative = "g")
+    output[row, "cokriging_errorWilcoxon0.0025"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.005, paired = TRUE, alternative = "g")
+    output[row, "kriging_errorWilcoxon0.005"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.005, paired = TRUE, alternative = "g")
+    output[row, "cokriging_errorWilcoxon0.005"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.01, paired = TRUE, alternative = "g")
+    output[row, "kriging_errorWilcoxon0.01"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.01, paired = TRUE, alternative = "g")
+    output[row, "cokriging_errorWilcoxon0.01"] <- hypSame$p.value
+    
+    # hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, paired = TRUE, alternative = "less")
+    # output[row, "kriging_corrWilcoxon"] <- hypSame$p.value
+    # hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, paired = TRUE, alternative = "less")
+    # output[row, "cokriging_corrWilcoxon"] <- hypSame$p.value
+    # 
+    # hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, paired = TRUE, alternative = "g")
+    # output[row, "kriging_errorWilcoxon"] <- hypSame$p.value
+    # hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, paired = TRUE, alternative = "g")
+    # output[row, "cokriging_errorWilcoxon"] <- hypSame$p.value
   }
   return(output)
 }

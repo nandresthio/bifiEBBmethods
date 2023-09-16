@@ -1,9 +1,8 @@
 source("R_code/dataProcessor.R")
 
 # Get the information from the runs, and the sample and "perfect" features, then combine into a single data set
-rawResultsSynth <- combineArrayResults("experimentalRunSurrogateModelWithFixedSample", 1, 2890, 20)
+rawResultsSynth <- combineArrayResults("experimentalRunSurrogateModelWithFixedSample", 1, 5780, 10)
 rawResultsSOLAR <- combineArrayResults("experimentalRunSurrogateModelWithFixedSampleSOLAR", 1, 2160)
-rawResults <- rawResultsSynth
 rawResults <- rbind(rawResultsSOLAR, rawResultsSynth)
 features <- read.table("data/features/sampleAndRealFeaturesCleanStandarised.txt", header = TRUE, sep = " ")
 
@@ -22,39 +21,31 @@ write.table(augmentedResults, "data/isaMetadata/surrogateModelWithFixedSampleAgg
 
 # Round performance to 3 decimal places so that Wilcoxon test does not see a difference
 # in model correlation of 0.9951 and 0.9952
-augmentedResults$kriging_modelCorrelation <- round(augmentedResults$kriging_modelCorrelation / 0.001) * 0.001
-augmentedResults$cokriging_modelCorrelation <- round(augmentedResults$cokriging_modelCorrelation / 0.001) * 0.001
-augmentedResults$kriging_modelError <- round(augmentedResults$kriging_modelError / 0.001)*0.001
-augmentedResults$cokriging_modelError <- round(augmentedResults$cokriging_modelError / 0.001)*0.001
+# augmentedResults$kriging_modelCorrelation <- round(augmentedResults$kriging_modelCorrelation / 0.001) * 0.001
+# augmentedResults$cokriging_modelCorrelation <- round(augmentedResults$cokriging_modelCorrelation / 0.001) * 0.001
+# augmentedResults$kriging_modelError <- round(augmentedResults$kriging_modelError / 0.001)*0.001
+# augmentedResults$cokriging_modelError <- round(augmentedResults$cokriging_modelError / 0.001)*0.001
 condensedData <- condenseData(augmentedResults, c("kriging", "cokriging"))
 # Sadly cannot use , for instance names, need to change it to underscore
 condensedData$instances <- gsub(',', '_', condensedData$instances)
-# Will only want instances, sources, single algorithm measure and features
-condensedData <- condensedData[c("instances", "Source", "kriging_corrWilcoxon", "cokriging_corrWilcoxon",
-                                 colnames(condensedData[str_which(colnames(condensedData), "feature_")]))]
-colnames(condensedData)[c(3,4)] <- c("algo_kriging", "algo_cokriging")
 write.table(condensedData, "data/isaMetadata/surrogateModelWithFixedSampleMetadata.txt", quote = FALSE, row.names = FALSE)
 
 
-
-
-
-
-
-
 # Instance filtering algorithm
-purifyInstances <- function(featureData, algorithmLabels, eps){
+purifyInstances <- function(distMatrix, algorithmLabels, eps){
   # First create a dataframe in which to store all the information
-  labels <- data.frame(matrix(ncol = 0, nrow = nrow(featureData)))
+  labels <- data.frame(matrix(ncol = 0, nrow = nrow(distMatrix)))
   labels$preclude <- FALSE
   labels$visa <- FALSE
   labels$dissimlar <- TRUE
+  if(eps == 0){return(labels)}
   for(i in 1:(nrow(labels)-1)){
     cat(paste0("\rWorking on row ", i, "/", nrow(labels)))
     if(labels[i, "preclude"]){next}
     for(j in (i+1):nrow(labels)){
       if(labels[j, "preclude"]){next}
-      dist <- sqrt(sum((Xfeat[i,] - Xfeat[j,])^2))
+      # dist <- sqrt(sum((featureData[i,] - featureData[j,])^2))
+      dist <- distMatrix[i,j]
       if(dist > eps){next}
       labels[j, "dissimlar"] <- FALSE
       if(sum(algorithmLabels[i, ] == algorithmLabels[j, ]) == ncol(algorithmLabels)){
@@ -69,16 +60,18 @@ purifyInstances <- function(featureData, algorithmLabels, eps){
   return(labels)
 }
 
-calculateCVNND <- function(featureData){
-  labels <- data.frame(matrix(ncol = 0, nrow = nrow(featureData)))
+calculateCVNND <- function(subsetDistMatrix){
+  labels <- data.frame(matrix(ncol = 0, nrow = nrow(subsetDistMatrix)))
   labels$minDist <- 0
+  if(nrow(labels) == 1){return(c(0,1))}
   for(i in 1:nrow(labels)){
     cat(paste0("\rWorking on row ", i, "/", nrow(labels)))
-    temp <- featureData[-i, ]
-    temp <- sweep(x = temp, MARGIN = 2, STATS = featureData[i, ], FUN = "-")
-    temp <- temp^2
-    temp <- rowSums(temp)
-    temp <- sqrt(temp)
+    temp <- subsetDistMatrix[-i,i]
+    # temp <- featureData[-i, ]
+    # temp <- sweep(x = temp, MARGIN = 2, STATS = featureData[i, ], FUN = "-")
+    # temp <- temp^2
+    # temp <- rowSums(temp)
+    # temp <- sqrt(temp)
     labels[i, "minDist"] <- min(temp)
   }
   CV = sd(labels$minDist)/mean(labels$minDist)
@@ -87,773 +80,1464 @@ calculateCVNND <- function(featureData){
   return(c(CV, Uniformity))
 }
 
+instancePurificationProcedure <- function(epsilons, instancesData, name){
+  results <- data.frame(matrix(nrow = 0, ncol = 0))
+  numResults <- 0
+  
+  # Really should do the instance distances once, save me a lot of time
+  Xfeat <- instancesData[, str_which(colnames(instancesData), "feature_")]
+  Xfeat <- data.matrix(Xfeat)
+  distMatrix <- matrix(nrow = nrow(instancesData), ncol = nrow(instancesData))
+  for(i in 1:(nrow(instancesData)-1)){
+    cat(paste0("\rWorking on distance matrix row ", i, "/", nrow(instancesData)))
+    for(j in i:nrow(instancesData)){
+      distMatrix[i,j] <- sqrt(sum((Xfeat[i,] - Xfeat[j,])^2))
+      distMatrix[j,i] <- distMatrix[i,j]
+    }
+  }
+  
+  for(eps in epsilons){
+    print(eps)
+    numResults <- numResults + 1
+    results[numResults, "epsilon"] <- eps
+    # Xfeat <- instancesData[, str_which(colnames(instancesData), "feature_")]
+    # Xfeat <- data.matrix(Xfeat)
+    Ybin <- instancesData[, c('algo_kriging', 'algo_cokriging')]
+    Ybin$algo_kriging <- as.numeric(instancesData$algo_kriging >= 0.5)
+    Ybin$algo_cokriging <- as.numeric(instancesData$algo_cokriging >= 0.5)
+    Ybin <- data.matrix(Ybin)
+    
+    # Have the data, first purify
+    labels <- purifyInstances(distMatrix, Ybin, eps)
+    results[numResults, "VisaRatio"] <- sum(labels$visa) / sum(!labels$preclude)
+    results[numResults, "InstancesRatio"] <- sum(!labels$preclude) / nrow(labels)
+    # Xfeat <- Xfeat[labels$dissimlar, ]
+    # Ybin <- Ybin[labels$dissimlar, ]
+    # Now calculate uniformity
+    subsetDistMatrix <- distMatrix[labels$dissimlar,labels$dissimlar]
+    vals <- calculateCVNND(subsetDistMatrix)
+    results[numResults, c("CV", "UniformVal")] <- vals
+    print(results)
+    if(0 %in% results$epsilon){
+      maxCV <- results[results$epsilon == 0, "CV"]
+      results$UniformValStandarised <- (results$UniformVal - (1 - maxCV)) / (1 - (1 - maxCV))
+    }
+    # Save results
+    write.table(labels, paste0("data/isaMetadata/instanceFiltering/", name, "eps", eps, ".txt"), quote = FALSE, row.names = FALSE)
+    # Also save the data
+    write.table(results, paste0("data/isaMetadata/instancePurification", name, ".txt"), quote = FALSE, row.names = FALSE)
+    # Plot spread of data to know which epsilon value to use
+    if(nrow(results) > 1){
+      plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsilons), max(epsilons)))
+      lines(results$epsilon, results$UniformVal, col="red", lty = 1)
+      lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
+      lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
+    }
+  }
+  
+  # If have done it with eps = 0, calculate the relative uniform value
+  # if(0 %in% epsilons){
+  #   maxCV <- results[results$epsilon == 0, "CV"]
+  #   results$UniformValStandarised <- (results$UniformVal - (1 - maxCV)) / (1 - (1 - maxCV))
+  # }
+  # write.table(results, paste0("data/isaMetadata/instancePurification", name, ".txt"), quote = FALSE, row.names = FALSE)
+  
+}
+
+
+findCorrs <- function(data){
+  corrs <- as.data.frame(matrix(ncol = 3, nrow = 0))
+  colnames(corrs) <- c("feature", "kriging", "cokriging")
+  for(i in 1:length(str_which(colnames(data), "feature_"))){
+    feat <- colnames(data[str_which(colnames(data), "feature_")])[[i]]
+    corrs[i, ] <- c(feat, abs(cor(data$algo_kriging, data[feat])), abs(cor(data$algo_cokriging, data[feat])))
+  }
+  corrs$maxCorr <- pmax(corrs$kriging, corrs$cokriging)
+  return(corrs)
+}
+
 
 
 # Get data subset for feature selection using instance filtering
 condensedData <- read.table("data/isaMetadata/surrogateModelWithFixedSampleMetadata.txt", header = TRUE, sep = " ")
-# Want to "scramble" instances so to even out what gets filtered out
+
+# Will want filtering for different features, performance matrix and tolerance!
+# First order instances
 instancesSolar <- condensedData[str_which(condensedData$instances, "SOLAR"), ]
 instancesDist <- condensedData[c(str_which(condensedData$instances, "Disturbance"),
-                                      str_which(condensedData$instances, "COCO")), ]
+                                 str_which(condensedData$instances, "COCO")), ]
 
 instancesLit <- condensedData[-c(str_which(condensedData$instances, "SOLAR"),
-                                          str_which(condensedData$instances, "Disturbance"),
-                                          str_which(condensedData$instances, "COCO")), ]
+                                 str_which(condensedData$instances, "Disturbance"),
+                                 str_which(condensedData$instances, "COCO")), ]
 set.seed(1)
 instancesSolar <- instancesSolar[sample(1:nrow(instancesSolar)), ]
 instancesDist <- instancesDist[sample(1:nrow(instancesDist)), ]
 instancesLit <- instancesLit[sample(1:nrow(instancesLit)), ]
-# Put them together again
+# Put them together again and save them
 instancesOrdered <- rbind(instancesSolar, instancesLit, instancesDist)
-instancesOrdered <- rbind(instancesLit, instancesDist)
+write.table(instancesOrdered, "data/isaMetadata/surrogateModelWithFixedSampleMetadataRandomOrder.txt", quote = FALSE, row.names = FALSE)
 
-results <- data.frame(matrix(nrow = 0, ncol = 0))
-numResults <- 0
-epsRange <- c(14, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
-for(eps in epsRange){
-  print(eps)
-  numResults <- numResults + 1
-  results[numResults, "epsilon"] <- eps
- 
-  Xfeat <- instancesOrdered[, str_which(colnames(instancesOrdered), "feature_")]
-  Xfeat <- data.matrix(Xfeat)
-  Ybin <- instancesOrdered[, c('algo_kriging', 'algo_cokriging')]
-  Ybin$algo_kriging <- as.numeric(instancesOrdered$algo_kriging >= 0.5)
-  Ybin$algo_cokriging <- as.numeric(instancesOrdered$algo_cokriging >= 0.5)
-  Ybin <- data.matrix(Ybin)
+# Now choose what the performance is, and do the filtering!
+tempInstancesAllFeatures <- instancesOrdered[c("instances", "Source", colnames(condensedData[str_which(colnames(condensedData), "feature_")]))]
+tempInstancesSampleFeatures <- instancesOrdered[c("instances", "Source", colnames(condensedData[str_which(colnames(condensedData), "feature_sample_")]))]
+tempInstancesSampleFeatures$feature_sample_dimension <- tempInstancesAllFeatures$feature_real_dimension
+
+# Now assign performance and do the filtering!
+tempInstances <- tempInstancesAllFeatures
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesCorrTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesCorrTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.0025
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesCorrTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.005
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesCorrTol0.005")
+                                                                               
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesErrorTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.001
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesErrorTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.0025
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesErrorTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.005
+instancePurificationProcedure(5:0, tempInstances, "allFeaturesErrorTol0.005")
+
+# Repeat with sample features!
+tempInstances <- tempInstancesSampleFeatures
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesCorrTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesCorrTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.0025
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesCorrTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.005
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesCorrTol0.005")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesErrorTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.001
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesErrorTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.0025
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesErrorTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.005
+instancePurificationProcedure(5:0, tempInstances, "sampleFeaturesErrorTol0.005")
+
+
+# Ok, have filtered everything, now is the time to choose features
+# Use hash to keep track of all chosen features
+# library(hash)
+# chosenFeatures <- hash()
+
+name <- "sampleFeaturesCorrTol0.001"
+data <- tempInstancesSampleFeatures
+# Need to add algorithm performance
+data$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+data$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+
+results <- read.table(paste0("data/isaMetadata/instancePurification", name, ".txt"), header = TRUE, sep = " ")
+# Don't really need to plot, just take the smallest epsilon for which the standarised uniform value is above 0.5
+results <- results[results$UniformValStandarised >= 0.5, ]
+eps <- min(results$epsilon)
+eps
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/", name, "eps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- data[!labels$preclude, ]
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
+corrs <- findCorrs(filteredData)
+write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
+chosenFeatures[[name]] <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
+# chosenFeatures[[name]] <- c(chosenFeatures[[name]], "feature_sample_highFiBudgetRatio")
+
+test <- corrs
+test <- test[str_which(test$feature, "Budget"), ]
+
+# NEED TO SAVE THIS!!
+# Want to pad with nas
+chosenFeaturesDataframe <- as.data.frame(matrix(nrow = length(keys(chosenFeatures)), ncol = 20))
+rownames(chosenFeaturesDataframe) <- keys(chosenFeatures)
+for(key in keys(chosenFeatures)){
+  line <- rep(NA, 20)
+  line[1:length(chosenFeatures[[key]])] <- chosenFeatures[[key]]
+  chosenFeaturesDataframe[key, ] <- line
   
-  # Have the data, first purify
-  labels <- purifyInstances(Xfeat, Ybin, eps)
-  results[numResults, "VisaRatio"] <- sum(labels$visa) / sum(!labels$preclude)
-  results[numResults, "InstancesRatio"] <- sum(!labels$preclude) / nrow(labels)
-  Xfeat <- Xfeat[labels$dissimlar, ]
-  Ybin <- Ybin[labels$dissimlar, ]
-  # Now calculate uniformity
-  vals <- calculateCVNND(Xfeat)
-  results[numResults, c("CV", "UniformVal")] <- vals
-  print(results)
-  # Save results
-  write.table(labels, paste0("data/isaMetadata/instanceFilteringFeatures/eps", eps, ".txt"), quote = FALSE, row.names = FALSE)
-  # Also save the data
-  write.table(results, "data/isaMetadata/instancePurificationFeatures.txt", quote = FALSE, row.names = FALSE)
-  # Plot spread of data to know which epsilon value to use
-  if(nrow(results) > 1){
-    plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
-    lines(results$epsilon, results$UniformVal, col="red", lty = 1)
-    lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
-    lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
-  }
+}
+write.table(chosenFeaturesDataframe, "data/isaMetadata/chosenFeatures.txt", quote = FALSE, row.names = TRUE, col.names = TRUE)
+
+
+
+# Ok so now have all of the chosen features, need to re run the filtering with the selected features
+library(hash)
+chosenFeatures <- hash()
+chosenFeaturesDataframe <- read.table("data/isaMetadata/chosenFeatures.txt", header = TRUE, sep = " ")
+for(rowName in rownames(chosenFeaturesDataframe)){
+  row <- chosenFeaturesDataframe[rowName, ]
+  row <- row[!is.na(row)]
+  chosenFeatures[[rowName]] <- row
 }
 
 
+tempInstances <- tempInstancesAllFeatures
 
-results <- read.table("data/isaMetadata/instancePurificationFeatures.txt", header = TRUE, sep = " ")
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesCorrTol0"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesCorrTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesCorrTol0.001"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesCorrTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.0025
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesCorrTol0.0025"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesCorrTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.005
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesCorrTol0.005"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesCorrTol0.005")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesErrorTol0"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesErrorTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.001
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesErrorTol0.001"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesErrorTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.0025
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesErrorTol0.0025"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesErrorTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.005
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["allFeaturesErrorTol0.005"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringAllFeaturesErrorTol0.005")
+
+# Repeat with sample features!
+tempInstances <- tempInstancesSampleFeatures
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesCorrTol0"]])
+instancePurificationProcedure(c(0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), tempInstances[colnames], "instanceFilteringSampleFeaturesCorrTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesCorrTol0.001"]])
+instancePurificationProcedure(c(0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), tempInstances[colnames], "instanceFilteringSampleFeaturesCorrTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.0025
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesCorrTol0.0025"]])
+instancePurificationProcedure(c(0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), tempInstances[colnames], "instanceFilteringSampleFeaturesCorrTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.005
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesCorrTol0.005"]])
+instancePurificationProcedure(c(0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), tempInstances[colnames], "instanceFilteringSampleFeaturesCorrTol0.005")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesErrorTol0"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringSampleFeaturesErrorTol0")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.001
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.001
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesErrorTol0.001"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringSampleFeaturesErrorTol0.001")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.0025
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.0025
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesErrorTol0.0025"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringSampleFeaturesErrorTol0.0025")
+
+tempInstances$algo_kriging <- instancesOrdered$kriging_errorWilcoxon0.005
+tempInstances$algo_cokriging <- instancesOrdered$cokriging_errorWilcoxon0.005
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesErrorTol0.005"]])
+instancePurificationProcedure(c(0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0), tempInstances[colnames], "instanceFilteringSampleFeaturesErrorTol0.005")
+
+
+
+
+
+# This deals with all the features
+isaName <- "sampleFeaturesCorrTol0.001"
+name <- "instanceFilteringSampleFeaturesCorrTol0.001"
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[[isaName]])
+data <- tempInstancesAllFeatures
+# Need to add algorithm performance
+data$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+data$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+results <- read.table(paste0("data/isaMetadata/instancePurification", name, ".txt"), header = TRUE, sep = " ")
+# Don't really need to plot, just take the smallest epsilon for which the standarised uniform value is above 0.5
+results <- results[results$UniformValStandarised >= 0.5, ]
+eps <- min(results$epsilon)
+eps
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/", name, "eps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- data[!labels$preclude, colnames]
+filteredData <- data[!labels$preclude, ]
+
+corrs <- findCorrs(filteredData)
+dir.create(paste0("matlab_code/ISA/", isaName, "/"))
+write.csv(filteredData, paste0("matlab_code/ISA/", isaName, "/metadata.csv"), quote = FALSE, row.names = FALSE)
+
+
+
+
+
+
+
+# Now plot some information on feature compared to performance
+# Ah, here we have the problem where I actually want real feature values
+# Get the "real" feature value
+preProcessedFeatures <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
+preProcessedFeatures$instanceName <- paste0(gsub('[(]', '', sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 1)), "_",
+                                            sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 2), "_",
+                                            sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 3))
+                                            
+projection <- read.table(paste0("matlab_code/ISA/sampleFeaturesCorrTol0.001/projection_matrix.csv"), header = TRUE, sep = ",")
+
+featuresOfInterest <- paste0("feature_", colnames(projection[-1]))
+# Add highFiBudgetRatio
+featuresOfInterest <- c(featuresOfInterest, "feature_sample_highFiBudgetRatio", "feature_sample_CC")
+
+dataOfInterest <- filteredData[c("instances", "Source", "algo_kriging", "algo_cokriging", featuresOfInterest)]
+
+for(feat in featuresOfInterest){
+  vals <- c()
+  i <- 0
+  print(feat)
+  for(instance in dataOfInterest$instances){
+    i <- i + 1
+    temp <- preProcessedFeatures[preProcessedFeatures$instanceName == instance, feat]
+    vals <- c(vals, mean(temp))
+  }
+  dataOfInterest[paste0("original_", feat)] <- vals
+}
+
+dataOfInterest[dataOfInterest$original_feature_sample_mid_ela_meta_lin_simple_adj_r2 < 0, 'original_feature_sample_mid_ela_meta_lin_simple_adj_r2'] <- 0
+dataOfInterest[dataOfInterest$original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2 < 0, 'original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2'] <- 0
+
+
+feats <- c("original_feature_sample_highFiBudgetRatio", 
+           "original_feature_sample_budgetRatio",
+           "original_feature_sample_LCCrel_0_4",
+           "original_feature_sample_LCCrel_0_95",
+           'original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2',
+           'original_feature_sample_mid_ela_meta_lin_simple_adj_r2',
+           "original_feature_sample_RRMSE",
+           "original_feature_sample_CC")
+
+plottingData <- as.data.frame(matrix(nrow = 0, ncol = 5))           
+colnames(plottingData) <- c("proportion", "number", "xVals", "Method", "feature")
+for(featName in paste0("original_", featuresOfInterest)){
+  print(featName)
+  intervals <- seq(min(unlist(dataOfInterest[featName])),max(unlist(dataOfInterest[featName])), 
+                   (max(unlist(dataOfInterest[featName])) - min(unlist(dataOfInterest[featName]))) / 10)
+  
+  proportionKrigGood <- c()
+  proportionCoKrigGood <- c()
+  proportionKrigBad <- c()
+  proportionCoKrigBad <- c()
+  numsKrigGood <- c()
+  numsCoKrigGood <- c()
+  xVals <- c()
+  for(i in 1:(length(intervals) - 1)){
+    xStart <- intervals[[i]]
+    xEnd <- intervals[[i+1]]
+    # xVals <- c(xVals, xStart + (xEnd - xStart)/2)
+    xVals <- c(xVals, xStart, xEnd)
+    
+    
+    numKrigGood <- nrow(dataOfInterest[dataOfInterest$algo_kriging >= 0.5 &
+                                         dataOfInterest[featName] >= (xStart - 0.001) &
+                                         dataOfInterest[featName] <= (xEnd + 0.001), ])
+    numCoKrigGood <- nrow(filteredData[dataOfInterest$algo_cokriging >= 0.5 &
+                                         dataOfInterest[featName] >= (xStart - 0.001) &
+                                         dataOfInterest[featName] <= (xEnd + 0.001), ])
+    
+    numKrigBad <- nrow(dataOfInterest[dataOfInterest$algo_kriging < 0.5 &
+                                        dataOfInterest[featName] >= (xStart - 0.001) &
+                                        dataOfInterest[featName] <= (xEnd + 0.001), ])
+    numCoKrigBad <- nrow(filteredData[dataOfInterest$algo_cokriging < 0.5 &
+                                        dataOfInterest[featName] >= (xStart - 0.001) &
+                                        dataOfInterest[featName] <= (xEnd + 0.001), ])
+    
+    # numsKrigGood <- c(numsKrigGood, numKrigGood)
+    # numsCoKrigGood <- c(numsCoKrigGood, numCoKrigGood)
+    # 
+    # proportionKrigGood <- c(proportionKrigGood, numKrigGood / (numKrigGood + numKrigBad))
+    # proportionCoKrigGood <- c(proportionCoKrigGood, numCoKrigGood / (numCoKrigGood + numCoKrigBad))
+    # proportionKrigBad <- c(proportionKrigBad, numKrigBad / (numKrigGood + numKrigBad))
+    # proportionCoKrigBad <- c(proportionCoKrigBad, numCoKrigBad / (numCoKrigGood + numCoKrigBad))
+    
+    numsKrigGood <- c(numsKrigGood, numKrigGood, numKrigGood)
+    numsCoKrigGood <- c(numsCoKrigGood, numCoKrigGood, numCoKrigGood)
+    
+    proportionKrigGood <- c(proportionKrigGood, numKrigGood / (numKrigGood + numKrigBad), numKrigGood / (numKrigGood + numKrigBad))
+    proportionCoKrigGood <- c(proportionCoKrigGood, numCoKrigGood / (numCoKrigGood + numCoKrigBad), numCoKrigGood / (numCoKrigGood + numCoKrigBad))
+    proportionKrigBad <- c(proportionKrigBad, numKrigBad / (numKrigGood + numKrigBad), numKrigBad / (numKrigGood + numKrigBad))
+    proportionCoKrigBad <- c(proportionCoKrigBad, numCoKrigBad / (numCoKrigGood + numCoKrigBad), numCoKrigBad / (numCoKrigGood + numCoKrigBad))
+    
+  }
+  currIndex <- nrow(plottingData)
+  range <- (currIndex + 1) : (currIndex + 2*length(proportionKrigGood))
+  plottingData[range, "proportion"] <- c(proportionKrigGood, proportionCoKrigGood)
+  plottingData[range, "number"] <- c(numsKrigGood, numsCoKrigGood)
+  plottingData[range, "xVals"] <- c(xVals, xVals)
+  plottingData[range, "Method"] <- c(rep("Kriging", length(proportionKrigGood)), rep("Co-Kriging", length(proportionCoKrigGood)))
+  plottingData[range, "feature"] <- featName
+}
+library(ggplot2)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_budgetRatio", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(B^{r}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodBudgetRatio.png", width = 3.5, height = 3.5)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_highFiBudgetRatio", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(B[h]^{r}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodHighFiBudgetRatio.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_4", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(LCC[0.4]^{0.2^{1/d}}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodLCC4.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_95", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(LCC[0.95]^{0.2^{1/d}}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.2, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodLCC95.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCC_sd", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(LCC[sd]^{0.2}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodLCCsd.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(R[LI]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodR2LI.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_meta_lin_simple_adj_r2", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(R[L]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodR2L.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_CC", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(CC))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodCC.png", width = 4, height = 4)
+
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ela_level_mmce_lda_50", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(MMCE[lda]^{0.5}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodMMCElda.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_RRMSE", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(RRMSE))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodRRMSE.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ic_m0", ], aes(x=xVals, y=proportion, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  ylim(0,1)+
+  xlab(expression(M[0]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_proportionGoodM0.png", width = 4, height = 4)
+
+
+
+# ACTUAL NUMBER
+ggplot(plottingData[plottingData$feature == "original_feature_sample_budgetRatio", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(B^{r}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodBudgetRatio.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_highFiBudgetRatio", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(B[h]^{r}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodHighFiBudgetRatio.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_4", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(LCC[0.4]^{0.2^{1/d}}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodLCC4.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_95", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(LCC[0.95]^{0.2^{1/d}}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodLCC95.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_LCC_sd", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(LCC[sd]^{0.2}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodLCCsd.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(R[LI]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodR2LI.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_meta_lin_simple_adj_r2", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(R[L]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodR2L.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_CC", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(CC))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodCC.png", width = 4, height = 4)
+
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ela_level_mmce_lda_50", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(MMCE[lda]^{0.5}))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodMMCElda.png", width = 4, height = 4)
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_RRMSE", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(RRMSE))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodRRMSE.png", width = 4, height = 4)
+
+
+ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ic_m0", ], aes(x=xVals, y=number, group=Method)) +
+  geom_line(aes(linetype=Method))+
+  geom_point(aes(shape=Method))+
+  xlab(expression(M[0]))+
+  ylab("Proportion of instances with good performance") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.2))
+ggsave("matlab_code/ISA/sampleFeaturesCorrTol0.001/custom_numberGoodM0.png", width = 4, height = 4)
+
+
+
+
+
+
+
+
+# Get some statistics on how accurate the guidelines are
+test <- dataOfInterest
+
+
+
+
+vals <- seq(0,1,0.05)
+accuracies <- c()
+for(val in vals){
+  chooseKrig <- test[test$original_feature_sample_CC < val, ]
+  chooseCoKrig <- test[!(test$original_feature_sample_CC < val), ]
+  accuracies <- c(accuracies, (sum(chooseKrig$algo_kriging >= 0.5) + sum(chooseCoKrig$algo_cokriging >= 0.5)) / nrow(test))
+}
+
+plot(vals, accuracies)
+
+
+test <- dataOfInterest
+
+# Rule based on high fi budget ratio
+chooseKrig <- test[test$original_feature_sample_highFiBudgetRatio >= 18, ]
+undecided <- test[test$original_feature_sample_highFiBudgetRatio < 18, ]
+
+# Rule based on budget ratio
+chooseKrig <- rbind(chooseKrig, undecided[undecided$original_feature_sample_budgetRatio == 1, ])
+undecided <- undecided[undecided$original_feature_sample_budgetRatio < 1, ]
+
+# Rule based on LCC 0.4
+chooseKrig <- rbind(chooseKrig, undecided[undecided$original_feature_sample_LCCrel_0_4 <= 0.7, ])
+undecided <- undecided[undecided$original_feature_sample_LCCrel_0_4 > 0.7, ]
+
+# Rule based on LCC 0.95
+chooseCoKrig <- undecided[undecided$original_feature_sample_LCCrel_0_95 >= 0.5 | 
+                            undecided$original_feature_sample_mid_ela_meta_lin_simple_adj_r2 >= 0.4,]
+
+undecided <- undecided[undecided$original_feature_sample_LCCrel_0_95 < 0.5 & 
+                                          undecided$original_feature_sample_mid_ela_meta_lin_simple_adj_r2 < 0.4,]
+
+
+# Sanity check that these are all distinct
+intersect(chooseKrig$instances, undecided$instances)
+intersect(chooseKrig$instances, chooseCoKrig$instances)
+intersect(chooseCoKrig$instances, undecided$instances)
+
+nrow(chooseKrig)
+nrow(chooseCoKrig)
+nrow(undecided)
+
+
+sum(chooseKrig$algo_kriging >= 0.5) / nrow(chooseKrig)
+sum(chooseCoKrig$algo_cokriging >= 0.5) / nrow(chooseCoKrig)
+
+
+# Now check what the remainder of the set looks like
+sum(undecided$algo_kriging >= 0.5)
+sum(undecided$algo_cokriging >= 0.5)
+
+# Might be nice to get a plot of these instances to know where they lie
+write.csv(undecided, paste0("matlab_code/ISA/sampleFeaturesCorrTol0.001/undecidedInstances.csv"), quote = FALSE, row.names = FALSE)
+
+# See about separating what is left using budget ratio or high fi budget ratio
+vals <- seq(0,1,0.05)
+accuracies <- c()
+for(val in vals){
+  subsetChooseKrig <- undecided[undecided$original_feature_sample_budgetRatio >= val, ]
+  subsetChooseCoKrig <- undecided[!(undecided$original_feature_sample_budgetRatio >= val), ]
+  accuracies <- c(accuracies, (sum(subsetChooseKrig$algo_kriging >= 0.5) + sum(subsetChooseCoKrig$algo_cokriging >= 0.5)) / nrow(undecided))
+}
+plot(vals, accuracies)
+
+vals <- seq(0,20,1)
+accuracies <- c()
+for(val in vals){
+  subsetChooseKrig <- undecided[undecided$original_feature_sample_highFiBudgetRatio > val, ]
+  subsetChooseCoKrig <- undecided[!(undecided$original_feature_sample_highFiBudgetRatio > val), ]
+  accuracies <- c(accuracies, (sum(subsetChooseKrig$algo_kriging >= 0.5) + sum(subsetChooseCoKrig$algo_cokriging >= 0.5)) / nrow(undecided))
+}
+plot(vals, accuracies)
+
+
+# Seems better to split based on relative number of high fidelity samples, with a split of 5d
+chooseKrig <- rbind(chooseKrig, undecided[undecided$original_feature_sample_highFiBudgetRatio >= 5, ])
+chooseCoKrig <- rbind(chooseCoKrig, undecided[undecided$original_feature_sample_highFiBudgetRatio < 5, ])
+
+nrow(chooseKrig)
+nrow(chooseCoKrig)
+
+
+(sum(chooseKrig$algo_kriging >= chooseKrig$algo_cokriging) + sum(chooseCoKrig$algo_cokriging >= chooseCoKrig$algo_kriging)) / nrow(test)
+
+
+# Something weird is going on with the predictor accuracy, I want to see
+# how often the chosen algorithm is labelled good
+
+
+
+
+
+
+# Get metadata with all features in order to do some extra plotting
+isaName <- "sampleFeaturesCorrTol0.001"
+name <- "instanceFilteringSampleFeaturesCorrTol0.001"
+data <- tempInstancesAllFeatures
+# Need to add algorithm performance
+data$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0.001
+data$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0.001
+results <- read.table(paste0("data/isaMetadata/instancePurification", name, ".txt"), header = TRUE, sep = " ")
+# Don't really need to plot, just take the smallest epsilon for which the standarised uniform value is above 0.5
+results <- results[results$UniformValStandarised >= 0.5, ]
+eps <- min(results$epsilon)
+eps
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/", name, "eps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- data[!labels$preclude, ]
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
+
+
+write.csv(filteredData, paste0("matlab_code/ISA/", isaName, "/metadataAllFeatures.csv"), quote = FALSE, row.names = FALSE)
+
+processedFeatures <- read.table(paste0("matlab_code/ISA/", isaName, "/feature_process.csv"), header = TRUE, sep = ",")
+
+
+
+
+
+
+# Ok, time to plot all of these things!
+# First focus on the sources
+folderName <- "sampleFeaturesCorrTol0.001"
+projection <- read.table(paste0("matlab_code/ISA/", folderName, "/projection_matrix.csv"), header = TRUE, sep = ",")
+z1Vals <- projection[projection$Row == "Z_{1}", ]
+z1Vals <- z1Vals[, -1]
+z2Vals <- projection[projection$Row == "Z_{2}", ]
+z2Vals <- z2Vals[, -1]
+
+eps <- 0.75
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/instanceFilteringSampleFeaturesCorrTol0.001eps0.3.txt"), header = TRUE, sep = " ")
+vals <- instancesOrdered[!labels$preclude, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
+
+vals$z1 <- 0
+vals$z2 <- 0
+for(name in colnames(projection[-1])){
+  realName <- paste0("feature_", name)
+  vals$z1 <- vals$z1 + z1Vals[1, name] * vals[, realName]
+  vals$z2 <- vals$z2 + z2Vals[1, name] * vals[, realName]
+}
+
+
+# vals$Source <- factor(vals$Source, levels = c('Disturbance based instances', "Parameter-based", "Error-based", 'Fixed'))
+vals$Source <- factor(vals$Source, levels = c("Disturbance-based", "Literature", "SOLAR"))
+vals <- vals[order(vals$Source), ]
+mult <- 1
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6, 8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesAll.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals[vals$Source != "Disturbance-based", ], aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6,8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesSOLARandLit.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals[vals$Source == "SOLAR", ], aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6,8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesSOLAR.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+# Will probably want the original... not sure how to go about this.
+# Maybe start with processing 
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_LCC_0_5)) +
+  geom_point(size = 0.5) +
+  # scale_color_gradient2(low = "blue1", mid = "orange", high = "red2") + 
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", LCC[0.5]^{0.2}))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSampleLCC05.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_LCCrel_0_9)) +
+  geom_point(size = 0.5) +
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", LCC[0.5]^{0.2^{1/d}}))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSampleLCCrel09.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_mid_ela_meta_lin_simple_adj_r2)) +
+  geom_point(size = 0.5) +
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", f[h] - f[l], " ", bar(R)[I]^2))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSamplemid_ela_meta_lin_simple_adj_r2.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# END OF USED CODE
+
+
+
+
+
+
+
+
+
+# This deals with sample features
+name <- "instanceFilteringSampleFeaturesCorrTol0"
+colnames <- c("instances", "Source", "algo_kriging", "algo_cokriging", chosenFeatures[["sampleFeaturesCorrTol0"]])
+data <- tempInstancesSampleFeatures
+# Need to add algorithm performance
+data$algo_kriging <- instancesOrdered$kriging_corrWilcoxon0
+data$algo_cokriging <- instancesOrdered$cokriging_corrWilcoxon0
+results <- read.table(paste0("data/isaMetadata/instancePurification", name, ".txt"), header = TRUE, sep = " ")
+# Don't really need to plot, just take the smallest epsilon for which the standarised uniform value is above 0.5
+results <- results[results$UniformValStandarised >= 0.5, ]
+eps <- min(results$epsilon)
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/", name, "eps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- data[!labels$preclude, colnames]
+write.csv(filteredData, "matlab_code/ISA/isaSampleFeatures/metadata.csv", quote = FALSE, row.names = FALSE)
+
+
+
+
+
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
+corrs <- findCorrs(filteredData)
+write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
+chosenFeatures[[name]] <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
+# chosenFeatures[[name]] <- c(chosenFeatures[[name]], "feature_sample_highFiBudgetRatio")
+
+
+
+
+
+
+
+
+
+
+
+# Look at actual correlation difference to see what it looks like
+# condensedData$algo_kriging <- condensedData$kriging_corrMean - condensedData$cokriging_corrMean
+# condensedData$algo_cokriging <- condensedData$cokriging_corrMean - condensedData$kriging_corrMean
+# condensedData <- condensedData[c("instances", "Source", "algo_kriging", "algo_cokriging",
+#                                  colnames(condensedData[str_which(colnames(condensedData), "feature_")]))]
+
+
+
+
+# # # Will only want instances, sources, single algorithm measure and features
+# condensedData <- condensedData[c("instances", "Source", "kriging_corrWilcoxon", "cokriging_corrWilcoxon",
+#                                  colnames(condensedData[str_which(colnames(condensedData), "feature_")]))]
+# colnames(condensedData)[c(3,4)] <- c("algo_kriging", "algo_cokriging")
+
+# # Will only want instances, sources, single algorithm measure and features
+condensedData <- condensedData[c("instances", "Source", "kriging_corrWilcoxon0.005", "cokriging_corrWilcoxon0.005",
+                                 colnames(condensedData[str_which(colnames(condensedData), "feature_")]))]
+colnames(condensedData)[c(3,4)] <- c("algo_kriging", "algo_cokriging")
+
+# Want to "scramble" instances so to even out what gets filtered out
+instancesSolar <- condensedData[str_which(condensedData$instances, "SOLAR"), ]
+instancesDist <- condensedData[c(str_which(condensedData$instances, "Disturbance"),
+                                 str_which(condensedData$instances, "COCO")), ]
+
+instancesLit <- condensedData[-c(str_which(condensedData$instances, "SOLAR"),
+                                 str_which(condensedData$instances, "Disturbance"),
+                                 str_which(condensedData$instances, "COCO")), ]
+set.seed(1)
+instancesSolar <- instancesSolar[sample(1:nrow(instancesSolar)), ]
+instancesDist <- instancesDist[sample(1:nrow(instancesDist)), ]
+instancesLit <- instancesLit[sample(1:nrow(instancesLit)), ]
+# Put them together again and save them
+instancesOrdered <- rbind(instancesSolar, instancesLit, instancesDist)
+
+write.table(instancesOrdered, "data/isaMetadata/surrogateModelWithFixedSampleMetadataRandomOrder.txt", quote = FALSE, row.names = FALSE)
+
+
+# Do a filtering with all of the features
+instancePurificationProcedure(10:0, instancesOrdered, "allFeatures")
+
+instancesOrderedSampleFeatures <- instancesOrdered[c(1:4, str_which(colnames(instancesOrdered), "feature_sample"))]
+instancePurificationProcedure(10:0, instancesOrderedSampleFeatures, "sampleFeatures")
+
+
+# Next, for each of the two plot the filtering results, choose the right epsilon,
+# and get the features using ISA feature selection
+results <- read.table("data/isaMetadata/instancePurificationallFeatures.txt", header = TRUE, sep = " ")
 epsRange <- results$epsilon
-# Standarise UniformVal using max CV
-# Sounds like the max cv val happens for an epsilon of 0, just calculate that
-Xfeat <- instancesOrdered[, str_which(colnames(instancesOrdered), "feature_")]
-Xfeat <- data.matrix(Xfeat)
-vals <- calculateCVNND(Xfeat)
-maxCV <- vals[[1]]
-results$UniformValStandarised <- (results$UniformVal - (1 - maxCV)) / (1 - (1 - maxCV))
-
 plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
 lines(results$epsilon, results$UniformValStandarised, col="red", lty = 1)
 lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
 lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
-lines(c(1, 14), c(0.5, 0.5))
+lines(c(min(epsRange), max(epsRange)), c(0.5, 0.5))
 lines(c(3, 3), c(0, 1))
-
-
 # Choose epsilon and filter data
 eps <- 3
-labels <- read.table(paste0("data/isaMetadata/instanceFilteringFeatures/eps", eps, ".txt"), header = TRUE, sep = " ")
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/allFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- instancesOrdered
 filteredData <- instancesOrdered[!labels$preclude, ]
+# Scale data to have mean 0 and sd 1 as this helps ISA in general
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
 write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
 
-# Run feature selection
-system("matlab -nodisplay -r \"run('matlab_code/featureSelection/example.m'); exit\"")
-# Read in cho
 
-
-# Now use this to choose which features to use
-# First calculate correlation between performance and feature value,
-# and remove any that are below a threshold of 0.3
-filteredData <- condensedData
-filteredData <- filteredData[filteredData$feature_sample_highFiBudgetRatio > 4, ]
-filteredData <- filteredData[filteredData$feature_sample_lowFiBudgetRatio > 4, ]
-
-
-corrThreshold <- 0.2
-correlatedFeatures <- c()
-for(i in 1:length(str_which(colnames(filteredData), "feature_"))){
-  
-  feat <- colnames(filteredData[str_which(colnames(filteredData), "feature_")])[[i]]
-  print(feat)
-  if(abs(cor(filteredData$algo_kriging, filteredData[feat])) < corrThreshold &
-     abs(cor(filteredData$algo_cokriging, filteredData[feat])) < corrThreshold){next}
-  print(paste0(feat, " corr", abs(cor(filteredData$algo_kriging, filteredData[feat])), ", ", abs(cor(filteredData$algo_cokriging, filteredData[feat]))))
-  
-  correlatedFeatures <- c(correlatedFeatures, feat)
-}
+# Currently running k = 10, k = 6 does not give nice results, going with k = 15 and adding highFiBudget feature
+featuresKeptAll <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
+featuresKeptAll <- c(featuresKeptAll, "feature_sample_highFiBudgetRatio")
 
 
 
-# Ok, now should read in the features
-
-# And time to filter instances again using only these features
-featuresKept <- read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,]
-instancesOrderedWithChosenFeatures <- instancesOrdered[colnames(instancesOrdered) %in% c("instances", "Source", "algo_kriging", "algo_cokriging", paste0("feature_", featuresKept))]
-
-# instancesOrderedWithChosenFeatures <- instancesOrdered[colnames(instancesOrdered) %in% c("instances", "Source", "algo_kriging", "algo_cokriging", correlatedFeatures)]
-
-results <- data.frame(matrix(nrow = 0, ncol = 0))
-numResults <- 0
-epsRange <- c(5, 4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25)
-for(eps in epsRange){
-  print(eps)
-  numResults <- numResults + 1
-  results[numResults, "epsilon"] <- eps
-  
-  Xfeat <- instancesOrderedWithChosenFeatures[, str_which(colnames(instancesOrderedWithChosenFeatures), "feature_")]
-  Xfeat <- data.matrix(Xfeat)
-  Ybin <- instancesOrderedWithChosenFeatures[, c('algo_kriging', 'algo_cokriging')]
-  Ybin$algo_kriging <- as.numeric(instancesOrderedWithChosenFeatures$algo_kriging >= 0.5)
-  Ybin$algo_cokriging <- as.numeric(instancesOrderedWithChosenFeatures$algo_cokriging >= 0.5)
-  Ybin <- data.matrix(Ybin)
-  
-  # Have the data, first purify
-  labels <- purifyInstances(Xfeat, Ybin, eps)
-  results[numResults, "VisaRatio"] <- sum(labels$visa) / sum(!labels$preclude)
-  results[numResults, "InstancesRatio"] <- sum(!labels$preclude) / nrow(labels)
-  Xfeat <- Xfeat[labels$dissimlar, ]
-  Ybin <- Ybin[labels$dissimlar, ]
-  # Now calculate uniformity
-  vals <- calculateCVNND(Xfeat)
-  results[numResults, c("CV", "UniformVal")] <- vals
-  print(results)
-  # Save results
-  write.table(labels, paste0("data/isaMetadata/instanceFilteringFinal/eps", eps, ".txt"), quote = FALSE, row.names = FALSE)
-  # Also save the data
-  write.table(results, "data/isaMetadata/instancePurificationFinal.txt", quote = FALSE, row.names = FALSE)
-  # Plot spread of data to know which epsilon value to use
-  if(nrow(results) > 1){
-    plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
-    lines(results$epsilon, results$UniformVal, col="red", lty = 1)
-    lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
-    lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
-  }
-}
+corrs <- findCorrs(filteredData)
+# # Remove LCC coeff as it is correlated with RRMSE feature, and LCC mean as it is
+# # correlated with CC feature (want these as they are "traditional" features)
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCC_coeff", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCCrel_coeff", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCC_mean", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCCrel_mean", negate = TRUE)]
+# write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
+# # Run the feature choice (note that this should probably be run from MATLAB in order
+# # to see how many features matlab recommends)
+# system("matlab -nodisplay -r \"run('matlab_code/featureSelection/featureSelection.m'); exit\"")
+# featuresKeptAll <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
 
 
-# Same idea, choose the one you like best
-results <- read.table("data/isaMetadata/instancePurificationFinal.txt", header = TRUE, sep = " ")
+# Very nice! Repeat process with sample features
+results <- read.table("data/isaMetadata/instancePurificationsampleFeatures.txt", header = TRUE, sep = " ")
 epsRange <- results$epsilon
-# Standarise UniformVal using max CV
-# Sounds like the max cv val happens for an epsilon of 0, just calculate that
-Xfeat <- instancesOrderedWithChosenFeatures[, str_which(colnames(instancesOrderedWithChosenFeatures), "feature_")]
-Xfeat <- data.matrix(Xfeat)
-vals <- calculateCVNND(Xfeat)
-maxCV <- vals[[1]]
-results$UniformValStandarised <- (results$UniformVal - (1 - maxCV)) / (1 - (1 - maxCV))
-
 plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
-lines(results$epsilon, results$UniformVal, col="red", lty = 1)
+lines(results$epsilon, results$UniformValStandarised, col="red", lty = 1)
 lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
 lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
-lines(c(epsRange[1], epsRange[length(epsRange)]), c(0.5, 0.5))
-lines(c(3, 3), c(0, 1))
-
+lines(c(min(epsRange), max(epsRange)), c(0.5, 0.5))
+lines(c(2, 2), c(0, 1))
+# Choose epsilon and filter data
 eps <- 2
-labels <- read.table(paste0("data/isaMetadata/instanceFilteringFinal/eps", eps, ".txt"), header = TRUE, sep = " ")
-filteredData <- instancesOrderedWithChosenFeatures[!labels$preclude, ]
-write.csv(filteredData, "matlab_code/ISA/metadata.csv", quote = FALSE, row.names = FALSE)
-
-
-
-
-
-
-
-
-
-
-
-test <- augmentedResults
-
-test$algo_cokriging <- (test$cokriging_modelCorrelation + 1) / (pmax(test$cokriging_modelCorrelation + 1, test$kriging_modelCorrelation + 1))
-test$algo_kriging <- (test$kriging_modelCorrelation + 1) / (pmax(test$cokriging_modelCorrelation + 1, test$kriging_modelCorrelation + 1))
-
-
-
-
-# test$algo_cokriging <- test$cokriging_modelCorrelation - test$kriging_modelCorrelation + 2
-# test$algo_kriging <- test$kriging_modelCorrelation - test$cokriging_modelCorrelation + 2
-filteredData <- test
-
-corrThreshold <- 0.15
-correlatedFeatures <- c()
-for(i in 1:length(str_which(colnames(filteredData), "feature_"))){
-  
-  feat <- colnames(filteredData[str_which(colnames(filteredData), "feature_")])[[i]]
-  # print(feat)
-  if(abs(cor(filteredData$algo_kriging, filteredData[feat])) < corrThreshold &
-     abs(cor(filteredData$algo_cokriging, filteredData[feat])) < corrThreshold){next}
-  print(paste0(feat, " corr", abs(cor(filteredData$algo_kriging, filteredData[feat])), ", ", abs(cor(filteredData$algo_cokriging, filteredData[feat]))))
-  
-  correlatedFeatures <- c(correlatedFeatures, feat)
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/sampleFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- instancesOrdered[, c(1:4, str_which(colnames(instancesOrdered), "feature_sample"))]
+filteredData <- instancesOrdered[!labels$preclude, c(1:4, str_which(colnames(instancesOrdered), "feature_sample"))]
+# Scale data to have mean 0 and sd 1 as this helps ISA in general
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
 }
+corrs <- findCorrs(filteredData)
+# Currently running asking for 15 features
+write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
+featuresKeptSample <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
 
 
-for(i in 1:length(str_which(colnames(filteredData), "feature_"))){
-  feat <- colnames(filteredData[str_which(colnames(filteredData), "feature_")])[[i]]
-  vals <- filteredData[feat]
-  minVal <- min(vals)
-  maxVal <- max(vals)
-  interval <- (maxVal - minVal) / 9
-  intervals <- c()
-  steps <- c()
-  for(i in 0:9){
-    intervals <- c(intervals, sum(vals < (minVal + (maxVal - minVal)/9 * i))/nrow(vals))
-    steps <- c(steps, (minVal + (maxVal - minVal)/9 * i))
-  }
-  print(steps)
-  print(feat)
-  print(intervals)
-}
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCC_coeff", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCCrel_coeff", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCC_mean", negate = TRUE)]
+# filteredData <- filteredData[str_which(colnames(filteredData), "LCCrel_mean", negate = TRUE)]
+# write.csv(filteredData, "matlab_code/featureSelection/metadata.csv", quote = FALSE, row.names = FALSE)
+# system("matlab -nodisplay -r \"run('matlab_code/featureSelection/featureSelection.m'); exit\"")
+# featuresKeptSample <- paste0("feature_", read.table("matlab_code/featureSelection/features.txt", header = FALSE, sep = ",")[1,])
 
 
 
 
 
-test[test$algo_cokriging == 2, ]
+# Rerunning the process leads to different features being chosen, here is a set that produced nice results
+# featuresKeptAll <- c("feature_sample_LCC_0_5",
+#                      "feature_sample_LCCrel_0_9",
+#                      "feature_sample_mid_ela_meta_lin_simple_adj_r2",
+#                      "feature_sample_mid_ela_meta_lin_w_interact_adj_r2",
+#                      "feature_sample_mid_ela_meta_quad_w_interact_adj_r2",
+#                      "feature_sample_high_nbc_nb_fitness_cor",
+#                      "feature_sample_RRMSE",
+#                      "feature_sample_mid_nbc_dist_ratio_coeff_var",
+#                      "feature_sample_highFiBudgetRatio",
+#                      "feature_sample_budgetRatio",
+#                      "feature_real_CC",
+#                      "feature_diff_high_ela_meta_lin_w_interact_adj_r2",
+#                      "feature_diff_mid_ela_meta_lin_simple_adj_r2",
+#                      "feature_diff_high_ela_distr_kurtosis",
+#                      "feature_diff_mid_ela_distr_kurtosis")
 
 
 
+# One more round of instance filtering with the now chosen features
+instancePurificationProcedure(c(1, 0.9, 0.8, 0.7, 0.6, 0.5, 0), instancesOrdered[c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)], "chosenFeatures")
+instancePurificationProcedure(c(1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0), instancesOrdered[c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptSample)], "chosenSampleFeatures")
 
-
-
-
-
-
-
-
-
-
-
-oldData <- read.table("data/isaMetadata/OLDcleanedMetadataNormalised.txt", header = TRUE, sep = " ")
-oldDataCondensed <- read.table("data/isaMetadata/OLDmetadataCondensed.txt", header = TRUE, sep = " ")
-data <- oldDataCondensed
-data$algo_kriging <- data$kriging_corrWilcoxon
-data$algo_cokriging <- data$cokriging_corrWilcoxon
-
-corrThreshold <- 0.2
-correlatedFeatures <- c()
-for(i in 1:length(str_which(colnames(data), "feature_"))){
-  
-  feat <- colnames(data[str_which(colnames(data), "feature_")])[[i]]
-  print(feat)
-  print(paste0(feat, " corr", abs(cor(data$algo_kriging, data[feat])), ", ", abs(cor(data$algo_cokriging, data[feat]))))
-  
-  if(abs(cor(data$algo_kriging, data[feat])) < corrThreshold &
-     abs(cor(data$algo_cokriging, data[feat])) < corrThreshold){next}
-  
-  correlatedFeatures <- c(correlatedFeatures, feat)
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-split <- strsplit(condensedData$instance, "_")
-functionNames <- unique(sapply(split, "[[", 1))
-track <- 0
-for(functionName in functionNames){
-  track <- track + 1
-  print(functionName)
-  temp <- condensedData[str_which(condensedData$instances, functionName), ]
-  
-  vals <- data.frame(matrix(ncol = 4, nrow = 0))
-  index <- 0
-  for(low in unique(temp$feature_sample_lowFiBudgetRatio)){
-    for(high in unique(temp$feature_sample_highFiBudgetRatio)){
-      index <- index + 1
-      if(low < high){vals[index, ] <- c(1, 1, low, high)}
-      else{
-        vals[index, ] <- c(temp[temp$feature_sample_highFiBudgetRatio == high & 
-                              temp$feature_sample_lowFiBudgetRatio == low, "algo_kriging"],
-                           temp[temp$feature_sample_highFiBudgetRatio == high & 
-                                  temp$feature_sample_lowFiBudgetRatio == low, "algo_cokriging"],
-                            low, high)
-      }
-    }
-  }
-  colnames(vals) <- c("valueKrig", "valueCoKrig", "low", "high")
-  # vals <- matrix(vals, nrow = length(unique(temp$feature_sample_highFiBudgetRatio)), ncol = length(unique(temp$feature_sample_lowFiBudgetRatio)))
-  ggplot(vals, aes(low, high, z = valueKrig)) + geom_contour_filled()
-  ggsave(paste0(track, "-", functionName, "Krig.png"))
-  ggplot(vals, aes(low, high, z = valueCoKrig)) + geom_contour_filled()
-  ggsave(paste0(track, "-", functionName, "CoKrig.png"))
-  
-}
-
-if (!require("processx")) install.packages("processx")
-fig <- plot_ly(z = ~volcano) %>% add_surface()
-orca(fig, "surface-plot.svg")
-
-
-
-instancesName <- unique(sapply(split, "[[", 1))[[96]]
-temp <- condensedData[str_which(condensedData$instances, instancesName), ]
-
-augmentedResults <- augmentedResults[str_which(augmentedResults$instances, instancesName), ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Try my hand at what andres is doing
-# First use kmeans clustering to separate the features into clusters
-kmeans()
-
-
-
-# Get MATLAB to tell what a good number of features is
-library(R.matlab)
-Matlab$startServer()
-matlab <- Matlab()
-isOpen <- open(matlab)
-nalgos = length(colnames(filteredData[str_which(colnames(filteredData), "corrWilcoxon")]))
-temp <- filteredData[correlatedFeatures]
-Xtemp <- data.matrix(temp)
-temp <- filteredData[str_which(colnames(filteredData), "corrWilcoxon")]
-Ytemp <- data.matrix(temp)
-setVariable(matlab, X = Xtemp)
-setVariable(matlab, Y = Ytemp)
-setVariable(matlab, nfeats = length(correlatedFeatures))
-
-evaluate(matlab, "out.eva = evalclusters(X', 'kmeans', 'Silhouette', 'KList', 3:nfeats, 'Distance', 'correlation');")
-evaluate(matlab, "ks = out.eva.InspectedK;")
-evaluate(matlab, "vals = out.eva.CriterionValues;")
-ks <- getVariable(matlab, "ks")[[1]]
-vals <- getVariable(matlab, "vals")[[1]]
-# Plot this to know how many features to use
-plot(ks, vals, type = 'l')
-# Need to choose how many features are desired
-numFeatures <- 10
-setVariable(matlab, numFeatures = numFeatures)
-evaluate(matlab, "out.clust = bsxfun(@eq, kmeans(X', numFeatures, 'Distance', 'correlation', 'MaxIter', 1000, 'Replicates', 100, 'Options', statset('UseParallel', nworkers~=0), 'OnlinePhase', 'on'), 1:numFeatures);")
-evaluate(matlab, "out.clust = bsxfun(@eq, kmeans(X', numFeatures, 'correlation'), 1:numFeatures);")
-
-
-
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-close(matlab)
-
-# rng('default');
-# out.eva = evalclusters(Xaux', 'kmeans', 'Silhouette', 'KList', 3:nfeats, ... % minimum of three features
-#                               'Distance', 'correlation');
-# disp('-> Average silhouette values for each number of clusters.')
-# disp([out.eva.InspectedK; out.eva.CriterionValues]);
-
-
-
-
-
-
-
-
-
-
-
-
-# Normalise data using Box-Cox and Z transformations
-evaluate(matlab, "[out.rho,out.p] = corr(X,Y,'rows','pairwise');")
-evaluate(matlab, "rho = out.rho;")
-evaluate(matlab, "rho(isnan(rho) | (out.p>0.05)) = 0;")
-evaluate(matlab, "[rho,row] = sort(abs(rho),1,'descend');")
-
-rho <- getVariable(matlab, "rho")[[1]]
-pVal <- getVariable(matlab, "out.p")[[1]]
-
-rho <- as.data.frame(rho)
-rho$v3 <- 0
-rho$v4 <- 0
-
-
-
-
-
-
-evaluate(matlab, "out.selvars = false(1,nfeats);")
-evaluate(matlab, "out.selvars(unique(row(1,:))) = true;")
-evaluate(matlab, "Xaux = X(:,out.selvars);")
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-evaluate(matlab, "")
-
-
-
-evaluate(matlab, "out.minX = min(X,[],1);")
-evaluate(matlab, "X = bsxfun(@minus,X,out.minX)+1;")
-for(i in 1:ncols){
-  print(i)
-  setVariable(matlab, i = i)
-  evaluate(matlab, "aux = X(:,i);")
-  evaluate(matlab, "idx = isnan(aux);")
-  evaluate(matlab, "[aux, temp] = boxcox(aux(~idx));")
-  evaluate(matlab, "[aux, temp, temp2] = zscore(aux);")
-  evaluate(matlab, "X(~idx,i) = aux;")
-}
-Xout <- getVariable(matlab, "X")[[1]]
-allFeaturesNormalised <- allFeatures
-allFeaturesNormalised[str_which(colnames(allFeaturesNormalised), "feature_")] <- Xout
-close(matlab)
-
-
-
-
-
-
-
-
-
-# Here want to do 4 "feature selection" options: By hand or using ISA code,
-# and all features / only sample features
-# Get "Nico only" features, chosen by hand. Essentially get features of different kinds
-# which have at least a correlation of 0.2 with either kriging or cokriging performance
-# Note kriging and cokriging performance is not normalised, only the feature values are
-labels <- read.table("data/combinedData/instanceFiltering/condensedCorrWilcoxoneps5.txt", header = TRUE, sep = " ")
-chosenData <- condensedData
-chosenData <- chosenData[!labels$preclude, ]
-correlations <- data.frame(matrix(nrow = 0, ncol = 3))
-colnames(correlations) <- c("feature", "krigCorr", "cokrigCorr")
-# max <- 0.3
-for(feat in colnames(chosenData[, str_which(colnames(chosenData), "feature_")])){
-  correlations[nrow(correlations) + 1, ] <- c(feat, 
-                                              abs(cor(chosenData[, feat], chosenData$cokriging_corrWilcoxon)), 
-                                              abs(cor(chosenData[, feat], chosenData$kriging_corrWilcoxon)))
-}
-
-# Choose subset of all features, and subset of sample features
-nicoFeats <- c()
-nicoSampleFeats <- c()
-# High function landscape features to use
-nicoFeats <- c('feature_error_diff_high_ela_meta_lin_w_interact_adj_r2')
-# nicoSampleFeats <- c('feature_sample_high_nbc_nb_fitness_cor')
-# Low function landscape features to use
-# None - correlation below 0.2 for both Krig and CoKrig
-# Mid function landscape features to use
-nicoFeats <- c(nicoFeats,
-               'feature_sample_mid_pca_expl_var_cor_init',
-               'feature_sample_mid_nbc_dist_ratio_coeff_var',
-               'feature_sample_mid_ela_meta_lin_w_interact_adj_r2')
-nicoSampleFeats <- c(nicoSampleFeats,
-                     'feature_sample_mid_pca_expl_var_cor_init',
-                     'feature_sample_mid_nbc_dist_ratio_coeff_var',
-                     'feature_sample_mid_ela_meta_lin_w_interact_adj_r2')
-# Now sample features
-nicoFeats <- c(nicoFeats, 'feature_sample_budgetRatio', 'feature_sample_highFiBudgetRatio')
-nicoSampleFeats <- c(nicoSampleFeats, 'feature_sample_budgetRatio', 'feature_sample_highFiBudgetRatio')
-# Finally, look at relationship features (i.e. LCC, CC, RRMSE, etc...)
-nicoFeats <- c(nicoFeats,
-               'feature_LCC_0_5',
-               'feature_sample_LCC_sd',
-               'feature_sample_LCC_0_5',
-               'feature_error_diff_LCC_0_5')
-nicoSampleFeats <- c(nicoSampleFeats,
-                     'feature_sample_LCC_sd',
-                     'feature_sample_LCC_0_5')
-
-
-
-projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/Old best story/corrCondensedFinalWilcoxonSpecifiedFeatures/projection_matrix.csv", header = TRUE, sep = ",")
-featNames <- paste0("feature_", colnames(projection[, -1]))
-
-nicoFeats <- c(featNames) 
-
-
-
-
-
-
-
-secondTest <- correlations
-secondTest$krigCorr <- round(as.numeric(secondTest$krigCorr), 3)
-secondTest$cokrigCorr <- round(as.numeric(secondTest$cokrigCorr), 3)
-
-secondTest <- secondTest[str_which(secondTest$feature, "mid"), ]
-secondTest <- secondTest[apply(secondTest[c(2,3)], 1, max, na.rm=TRUE) > 0.2 , ]
-
-
-
-secondTest <- secondTest[c(7:20, 146:160, 328:341), ]
-
-
-
-secondTest <- secondTest[c(str_which(secondTest$feature, "budget"),
-                           str_which(secondTest$feature, "Budget")), ]
-
-
-
-
-
-
-# At this point, look at data from filtering and choose appropriate epsilon, save 4 ISA selection 
-# feature runs, with and without specified features, and with and without "perfect" features
-labels <- read.table("data/combinedData/instanceFiltering/condensedCorrWilcoxoneps5.txt", header = TRUE, sep = " ")
-chosenData <- condensedData
-chosenData <- chosenData[!labels$preclude, ]
-chosenData$algo_kriging <- chosenData$kriging_corrWilcoxon
-chosenData$algo_cokriging <- chosenData$cokriging_corrWilcoxon
-chosenData <- chosenData[, str_which(names(chosenData), "kriging_", negate = TRUE)]
-
-# All features and automatic feature selection
-specificChosenData <- chosenData
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxon/"))
-write.csv(specificChosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxon/metadata.csv"), quote = FALSE, row.names = FALSE)
-# Sample features and automatic feature selection
-specificChosenData <- chosenData
-specificChosenData <- specificChosenData[, c("instances", "Source", "algo_kriging", "algo_cokriging", colnames(specificChosenData)[str_which(colnames(specificChosenData), "feature_sample")])]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnly/"))
-write.csv(specificChosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnly/metadata.csv"), quote = FALSE, row.names = FALSE)
-# All features and specified features
-specificChosenData <- chosenData
-specificChosenData <- specificChosenData[, c("instances", "Source", "algo_kriging", "algo_cokriging", nicoFeats)]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSpecifiedFeatures/"))
-write.csv(specificChosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSpecifiedFeatures/metadata.csv"), quote = FALSE, row.names = FALSE)
-# Sample features and automatic feature selection
-specificChosenData <- chosenData
-specificChosenData <- specificChosenData[, c("instances", "Source", "algo_kriging", "algo_cokriging", nicoSampleFeats)]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnlySpecifiedFeatures/"))
-write.csv(specificChosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnlySpecifiedFeatures/metadata.csv"), quote = FALSE, row.names = FALSE)
-
-
-
-
-
-
-# Once feature selection is complete, time to repeat instance selection, but this time only with selected features!
-results <- data.frame(matrix(nrow = 0, ncol = 0))
-numResults <- 0
-epsRange <- c(1.5, 1.4, 1.3, 1.2, 1.1, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.075, 0.05, 0.025)
-# epsRange <- c(2, 1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3, 1.2, 1.1, 1.0)
-
-for(eps in epsRange){
-  print(eps)
-  numResults <- numResults + 1
-  results[numResults, "epsilon"] <- eps
-  for(i in 3:3){
-    if(i == 1){
-      projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxon/projection_matrix.csv", header = TRUE, sep = ",")
-      featNames <- paste0("feature_", colnames(projection[, -1]))
-      Xfeat <- condensedData[, featNames]
-      Ybin <- condensedData[, c('kriging_corrWilcoxon', 'cokriging_corrWilcoxon')]
-      Ybin$kriging_corrWilcoxon <- as.numeric(condensedData$kriging_corrWilcoxon >= 0.5)
-      Ybin$cokriging_corrWilcoxon <- as.numeric(condensedData$cokriging_corrWilcoxon >= 0.5)
-      name <- 'condensedCorrWilcoxon'
-      
-    }else if(i == 2){
-      projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnly/projection_matrix.csv", header = TRUE, sep = ",")
-      featNames <- paste0("feature_", colnames(projection[, -1]))
-      Xfeat <- condensedData[, featNames]
-      Ybin <- condensedData[, c('kriging_corrWilcoxon', 'cokriging_corrWilcoxon')]
-      Ybin$kriging_corrWilcoxon <- as.numeric(condensedData$kriging_corrWilcoxon >= 0.5)
-      Ybin$cokriging_corrWilcoxon <- as.numeric(condensedData$cokriging_corrWilcoxon >= 0.5)
-      name <- 'condensedCorrWilcoxonSampleOnly'
-      
-    }else if(i == 3){
-      projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSpecifiedFeatures/projection_matrix.csv", header = TRUE, sep = ",")
-      featNames <- paste0("feature_", colnames(projection[, -1]))
-      Xfeat <- condensedData[, featNames]
-      Ybin <- condensedData[, c('kriging_corrWilcoxon', 'cokriging_corrWilcoxon')]
-      Ybin$kriging_corrWilcoxon <- as.numeric(condensedData$kriging_corrWilcoxon >= 0.5)
-      Ybin$cokriging_corrWilcoxon <- as.numeric(condensedData$cokriging_corrWilcoxon >= 0.5)
-      name <- 'condensedCorrWilcoxonSpecifiedFeatures'
-      
-    }else if(i == 4){
-      projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnlySpecifiedFeatures/projection_matrix.csv", header = TRUE, sep = ",")
-      featNames <- paste0("feature_", colnames(projection[, -1]))
-      Xfeat <- condensedData[, featNames]
-      Ybin <- condensedData[, c('kriging_corrWilcoxon', 'cokriging_corrWilcoxon')]
-      Ybin$kriging_corrWilcoxon <- as.numeric(condensedData$kriging_corrWilcoxon >= 0.5)
-      Ybin$cokriging_corrWilcoxon <- as.numeric(condensedData$cokriging_corrWilcoxon >= 0.5)
-      name <- 'condensedCorrWilcoxonSampleOnlySpecifiedFeatures'
-    }  
-    
-    
-    
-    
-    
-    
-    
-    # }else if(i == 2){
-    #   projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/errorCondensedFeatureSelectionWilcoxon/projection_matrix.csv", header = TRUE, sep = ",")
-    #   featNames <- paste0("feature_", colnames(projection[, -1]))
-    #   Xfeat <- condensedDataNormalised[, featNames]
-    #   Ybin <- condensedData[, c('kriging_errorWilcoxon', 'cokriging_errorWilcoxon')]
-    #   Ybin$kriging_errorWilcoxon <- as.numeric(condensedData$kriging_errorWilcoxon >= 0.5)
-    #   Ybin$cokriging_errorWilcoxon <- as.numeric(condensedData$cokriging_errorWilcoxon >= 0.5)
-    #   name <- 'condensedErrWilcoxon'
-    #   
-    # }else if(i == 3){
-    #   projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionMedian/projection_matrix.csv", header = TRUE, sep = ",")
-    #   featNames <- paste0("feature_", colnames(projection[, -1]))
-    #   Xfeat <- condensedDataNormalised[, featNames]
-    #   Ybin <- condensedData[, c('kriging_corrMedian', 'cokriging_corrMedian')]
-    #   Ybin$kriging_corrMedian <- as.numeric((condensedData$kriging_corrMedian + 1) >= 0.999 * (condensedData$cokriging_corrMedian + 1))
-    #   Ybin$cokriging_corrMedian <- as.numeric((condensedData$cokriging_corrMedian + 1) >= 0.999 * (condensedData$kriging_corrMedian + 1))
-    #   name <- 'condensedCorrMedian'
-    #   
-    # }else if(i == 4){
-    #   projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/errorCondensedFeatureSelectionMedian/projection_matrix.csv", header = TRUE, sep = ",")
-    #   featNames <- paste0("feature_", colnames(projection[, -1]))
-    #   Xfeat <- condensedDataNormalised[, featNames]
-    #   Ybin <- condensedData[, c('kriging_errorMedian', 'cokriging_errorMedian')]
-    #   Ybin$kriging_errorMedian <- as.numeric((condensedData$kriging_errorMedian + 1) <= 1.001 * (condensedData$cokriging_errorMedian + 1))
-    #   Ybin$cokriging_errorMedian <- as.numeric((condensedData$cokriging_errorMedian + 1) <= 1.001 * (condensedData$kriging_errorMedian + 1))
-    #   name <- 'condensedErrMedian'
-    # }
-    
-    Xfeat <- data.matrix(Xfeat)
-    Ybin <- data.matrix(Ybin)
-    
-    # Have the data, first purify
-    labels <- purifyInstances(Xfeat, Ybin, eps)
-    results[numResults, paste0(name, "VisaRatio")] <- sum(labels$visa) / sum(!labels$preclude)
-    results[numResults, paste0(name, "InstancesRatio")] <- sum(!labels$preclude) / nrow(labels)
-    Xfeat <- Xfeat[!labels$preclude, ]
-    Ybin <- Ybin[!labels$preclude, ]
-    # Now calculate uniformity
-    vals <- calculateCVNND(Xfeat)
-    results[numResults, c(paste0(name, "CV"), paste0(name, "UniformVal"))] <- vals
-    print(results)
-    
-    # In case this is ever done again
-    write.table(labels, paste0("data/combinedData/instanceFiltering/chosenFeatures_", name, "eps", eps, ".txt"), quote = FALSE, row.names = FALSE)
-  }
-  # Also save the data
-  write.table(results, "data/combinedData/chosenFeatures_instancePurificationResults.txt", quote = FALSE, row.names = FALSE)
-  # Here should be able to plot what is going on, maybe do it if have at least 2 rows
-  if(nrow(results) > 1){
-    plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
-    lines(results$epsilon, results$condensedCorrWilcoxonUniformVal, col="red", lty = 1)
-    lines(results$epsilon, results$condensedCorrWilcoxonVisaRatio, col="green", lty = 1)
-    lines(results$epsilon, results$condensedCorrWilcoxonInstancesRatio, col="blue", lty = 1)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyUniformVal, col="red", lty = 2)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyVisaRatio, col="green", lty = 2)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyInstancesRatio, col="blue", lty = 2)
-    lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesUniformVal, col="red", lty = 3)
-    lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesVisaRatio, col="green", lty = 3)
-    lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesInstancesRatio, col="blue", lty = 3)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesUniformVal, col="red", lty = 4)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesVisaRatio, col="green", lty = 4)
-    lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesInstancesRatio, col="blue", lty = 4)
-  }
-}
-
-
-
-
-results <- read.table("data/combinedData/chosenFeatures_instancePurificationResults.txt", header = TRUE, sep = " ")
-epsRange <- c(1.5, 1.4, 1.3, 1.2, 1.1, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.075, 0.05, 0.025)
+# Get instances for ISA
+results <- read.table("data/isaMetadata/instancePurificationchosenFeatures.txt", header = TRUE, sep = " ")
+epsRange <- results$epsilon
 plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
-lines(results$epsilon, results$condensedCorrWilcoxonUniformVal, col="red", lty = 1)
-lines(results$epsilon, results$condensedCorrWilcoxonVisaRatio, col="green", lty = 1)
-lines(results$epsilon, results$condensedCorrWilcoxonInstancesRatio, col="blue", lty = 1)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyUniformVal, col="red", lty = 2)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyVisaRatio, col="green", lty = 2)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlyInstancesRatio, col="blue", lty = 2)
-lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesUniformVal, col="red", lty = 3)
-lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesVisaRatio, col="green", lty = 3)
-lines(results$epsilon, results$condensedCorrWilcoxonSpecifiedFeaturesInstancesRatio, col="blue", lty = 3)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesUniformVal, col="red", lty = 4)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesVisaRatio, col="green", lty = 4)
-lines(results$epsilon, results$condensedCorrWilcoxonSampleOnlySpecifiedFeaturesInstancesRatio, col="blue", lty = 4)
+lines(results$epsilon, results$UniformValStandarised, col="red", lty = 1)
+lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
+lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
+lines(c(min(epsRange), max(epsRange)), c(0.5, 0.5))
+lines(c(0.5, 0.5), c(0, 1))
+# Choose epsilon and filter data
+eps <- 0.5
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/chosenFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- instancesOrdered[!labels$preclude, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
 
-lines(c(0.9, 0.9), c(0, 1))
+filteredData <- instancesOrdered[, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
 
-# At this point, look at data from filtering and choose appropriate epsilon for each of the 4 cases
-labels <- read.table("data/combinedData/instanceFiltering/chosenFeatures_condensedCorrWilcoxoneps0.8.txt", header = TRUE, sep = " ")
-chosenData <- condensedData[, 1:14]
-projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxon/projection_matrix.csv", header = TRUE, sep = ",")
-featNames <- paste0("feature_", colnames(projection[, -1]))
-chosenData$algo_kriging <- chosenData$kriging_corrWilcoxon
-chosenData$algo_cokriging <- chosenData$cokriging_corrWilcoxon
-chosenData <- chosenData[, str_which(names(chosenData), "kriging_", negate = TRUE)]
-chosenData[, featNames] <- condensedData[, featNames]
-chosenData <- chosenData[!labels$preclude, ]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxon/"))
-write.csv(chosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxon/metadata.csv"), quote = FALSE, row.names = FALSE)
-# At this point, look at data from filtering and choose appropriate epsilon for each of the 4 cases
-labels <- read.table("data/combinedData/instanceFiltering/chosenFeatures_condensedCorrWilcoxonSampleOnlyeps0.6.txt", header = TRUE, sep = " ")
-chosenData <- condensedData[, 1:14]
-projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnly/projection_matrix.csv", header = TRUE, sep = ",")
-featNames <- paste0("feature_", colnames(projection[, -1]))
-chosenData$algo_kriging <- chosenData$kriging_corrWilcoxon
-chosenData$algo_cokriging <- chosenData$cokriging_corrWilcoxon
-chosenData <- chosenData[, str_which(names(chosenData), "kriging_", negate = TRUE)]
-chosenData[, featNames] <- condensedData[, featNames]
-chosenData <- chosenData[!labels$preclude, ]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalSampleOnlyWilcoxon/"))
-write.csv(chosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalSampleOnlyWilcoxon/metadata.csv"), quote = FALSE, row.names = FALSE)
-# At this point, look at data from filtering and choose appropriate epsilon for each of the 4 cases
-labels <- read.table("data/combinedData/instanceFiltering/chosenFeatures_condensedCorrWilcoxonSpecifiedFeatureseps0.9.txt", header = TRUE, sep = " ")
-chosenData <- condensedData[, 1:14]
-projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSpecifiedFeatures/projection_matrix.csv", header = TRUE, sep = ",")
-featNames <- paste0("feature_", colnames(projection[, -1]))
-chosenData$algo_kriging <- chosenData$kriging_corrWilcoxon
-chosenData$algo_cokriging <- chosenData$cokriging_corrWilcoxon
-chosenData <- chosenData[, str_which(names(chosenData), "kriging_", negate = TRUE)]
-chosenData[, featNames] <- condensedData[, featNames]
-chosenData <- chosenData[!labels$preclude, ]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSpecifiedFeaturesNotNorm/"))
-write.csv(chosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSpecifiedFeaturesNotNorm/metadata.csv"), quote = FALSE, row.names = FALSE)
-# At this point, look at data from filtering and choose appropriate epsilon for each of the 4 cases
-labels <- read.table("data/combinedData/instanceFiltering/chosenFeatures_condensedCorrWilcoxonSampleOnlySpecifiedFeatureseps0.5.txt", header = TRUE, sep = " ")
-chosenData <- condensedData[, 1:14]
-projection <- read.table("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFeatureSelectionWilcoxonSampleOnlySpecifiedFeatures/projection_matrix.csv", header = TRUE, sep = ",")
-featNames <- paste0("feature_", colnames(projection[, -1]))
-chosenData$algo_kriging <- chosenData$kriging_corrWilcoxon
-chosenData$algo_cokriging <- chosenData$cokriging_corrWilcoxon
-chosenData <- chosenData[, str_which(names(chosenData), "kriging_", negate = TRUE)]
-chosenData[, featNames] <- condensedData[, featNames]
-chosenData <- chosenData[!labels$preclude, ]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSampleOnlySpecifiedFeatures/"))
-write.csv(chosenData, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSampleOnlySpecifiedFeatures/metadata.csv"), quote = FALSE, row.names = FALSE)
+# One last round of standarisation
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
+write.csv(filteredData, "matlab_code/ISA/isaAllFeatures/metadata.csv", quote = FALSE, row.names = FALSE)
 
 
 
-dataWithoutPerfectFeatures <- chosenData[-c(5, 6, 7, 12, 15, 18, 19)]
-dir.create(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSampleOnlySpecifiedFeatures/"))
-write.csv(dataWithoutPerfectFeatures, paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxonSampleOnlySpecifiedFeatures/metadata.csv"), quote = FALSE, row.names = FALSE)
+# Repeat for sample only features
+results <- read.table("data/isaMetadata/instancePurificationchosenSampleFeatures.txt", header = TRUE, sep = " ")
+epsRange <- results$epsilon
+plot(c(), c(), ylim = c(0, 1), xlim = c(min(epsRange), max(epsRange)))
+lines(results$epsilon, results$UniformValStandarised, col="red", lty = 1)
+lines(results$epsilon, results$VisaRatio, col="green", lty = 1)
+lines(results$epsilon, results$InstancesRatio, col="blue", lty = 1)
+lines(c(min(epsRange), max(epsRange)), c(0.5, 0.5))
+lines(c(0.3, 0.3), c(0, 1))
+# Choose epsilon and filter data
+eps <- 0.3
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/chosenSampleFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- instancesOrdered[!labels$preclude, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptSample)]
+for(feat in colnames(filteredData[str_which(colnames(filteredData), "feature")])){
+  filteredData[feat] <- (filteredData[feat] - mean(unlist(filteredData[feat])))/ sd(unlist(filteredData[feat]))
+}
+write.csv(filteredData, "matlab_code/ISA/isaSampleFeatures/metadata.csv", quote = FALSE, row.names = FALSE)
+
+
+
+
+
+
+
+# Ignore the plotting, let's look at playing with p-value stuff
+dataPreprocessed <- read.table(paste0("data/isaMetadata/surrogateModelWithFixedSampleAggregatedData.txt"), header = TRUE, sep = " ")
+featPreprocessed <- 
+  
+  
+  # Round performance to 3 decimal places so that Wilcoxon test does not see a difference
+  # in model correlation of 0.9951 and 0.9952
+  augmentedResults$kriging_modelCorrelation <- round(augmentedResults$kriging_modelCorrelation / 0.001) * 0.001
+augmentedResults$cokriging_modelCorrelation <- round(augmentedResults$cokriging_modelCorrelation / 0.001) * 0.001
+augmentedResults$kriging_modelError <- round(augmentedResults$kriging_modelError / 0.001)*0.001
+augmentedResults$cokriging_modelError <- round(augmentedResults$cokriging_modelError / 0.001)*0.001
+condensedData <- condenseData(augmentedResults, c("kriging", "cokriging"))
+# Sadly cannot use , for instance names, need to change it to underscore
+condensedData$instances <- gsub(',', '_', condensedData$instances)
+write.table(condensedData, "data/isaMetadata/surrogateModelWithFixedSampleMetadata.txt", quote = FALSE, row.names = FALSE)
+
+
+
+
+
+eps <- 0.75
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/chosenFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+filteredData <- instancesOrdered[!labels$preclude, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
+criticalData <- instancesOrdered[labels$visa, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
+
+predictions <- read.csv("matlab_code/ISA/isaAllFeatures/algorithm_bin.csv")
+krigGood <- filteredData[predictions$kriging == 1, ]
+krigBad <- filteredData[predictions$kriging == 0, ]
+
+
+
+# Here 
+
+
+featName <- "feature_sample_highFiBudgetRatio"
+featName <- "feature_sample_budgetRatio"
+
+
+intervals <- seq(min(unlist(filteredData[featName])),max(unlist(filteredData[featName])), 
+                 (max(unlist(filteredData[featName])) - min(unlist(filteredData[featName]))) / 10)
+
+proportionKrigGood <- c()
+proportionCoKrigGood <- c()
+proportionKrigBad <- c()
+proportionCoKrigBad <- c()
+xVals <- c()
+for(i in 1:(length(intervals) - 1)){
+  xStart <- intervals[[i]]
+  xEnd <- intervals[[i+1]]
+  xVals <- c(xVals, xStart + (xEnd - xStart)/2)
+  # numKrig <- nrow(filteredData[predictions$kriging == 1 & 
+  #                           filteredData[featName] >= xStart &
+  #                           filteredData[featName] <= xEnd, ])
+  # numCoKrig <- nrow(filteredData[predictions$cokriging == 1 & 
+  #                           filteredData[featName] >= xStart &
+  #                           filteredData[featName] <= xEnd, ])
+  # numKrig <- nrow(filteredData[predictions$kriging == 1 & 
+  #                                filteredData[featName] >= xStart, ])
+  # numCoKrig <- nrow(filteredData[predictions$cokriging == 1 & 
+  #                                  filteredData[featName] >= xStart, ])
+  
+  numKrigGood <- nrow(filteredData[predictions$kriging == 1 &
+                                     filteredData[featName] >= xStart &
+                                     filteredData[featName] <= xEnd, ])
+  numCoKrigGood <- nrow(filteredData[predictions$cokriging == 1 &
+                                       filteredData[featName] >= xStart &
+                                       filteredData[featName] <= xEnd, ])
+  
+  numKrigBad <- nrow(filteredData[predictions$kriging == 0 &
+                                    filteredData[featName] >= xStart &
+                                    filteredData[featName] <= xEnd, ])
+  numCoKrigBad <- nrow(filteredData[predictions$cokriging == 0 &
+                                      filteredData[featName] >= xStart &
+                                      filteredData[featName] <= xEnd, ])
+  
+  
+  proportionKrigGood <- c(proportionKrigGood, numKrigGood / (numKrigGood + numKrigBad))
+  proportionCoKrigGood <- c(proportionCoKrigGood, numCoKrigGood / (numCoKrigGood + numCoKrigBad))
+  proportionKrigBad <- c(proportionKrigBad, numKrigBad / (numKrigGood + numKrigBad))
+  proportionCoKrigBad <- c(proportionCoKrigBad, numCoKrigBad / (numCoKrigGood + numCoKrigBad))
+  # proportionKrig <- c(proportionKrig, numKrig)
+  # proportionCoKrig <- c(proportionCoKrig, numCoKrig)
+  
+  
+}
+
+# Here should be able to plot
+plot(xVals, proportionKrigGood, type = 'l', col = 'blue', ylim = c(0,1))
+# lines(xVals, proportionKrigBad, type = 'l', col = 'red')
+lines(xVals, proportionCoKrigGood, lty = 2, col = 'blue', ylim = c(0,1))
+# lines(xVals, proportionCoKrigBad, lty = 2, col = 'red')
+
+
+
+test <- read.table("data/isaMetadata/surrogateModelWithFixedSampleMetadata.txt", header = TRUE, sep = " ")
+test$algo_kriging <- test$kriging_errorMedian - test$cokriging_errorMedian
+test$algo_cokriging <- test$cokriging_errorMedian - test$kriging_errorMedian
+corrs <- findCorrs(test)
+
+
+
+
+
+
+
+
+
+
+
+
+
+wilcox.test(unlist(krigGood[featName]), unlist(krigBad[featName]))
+
+mean <- mean(unlist(krigGood[featName]))
+sd <- sd(unlist(krigGood[featName]))
+n <- nrow(krigGood)
+error <- qnorm(0.975)*sd/sqrt(n)
+mean + error
+mean - error
+
+quantile(unlist(krigGood[featName]), probs = c(0.05, 0.95))
+
+boxplot(krigGood[featName])
+
+boxplot(krigBad$feature_sample_highFiBudgetRatio)
+
+
+dev.print(png, file = "myplot.png", width = 1024, height = 768)
+jpeg("good.jpg")
+
+
+krigGood$val <- 1
+krigBad$val <- 2
+
+krig <- rbind(krigGood, krigBad)
+
+ggplot(krig, aes(x = val, y = feature_sample_highFiBudgetRatio)) +
+  boxplot(x = val, y = feature_sample_highFiBudgetRatio)
+
+boxplot(krig$feature_sample_highFiBudgetRatio)
+boxplot(krigBad$feature_sample_highFiBudgetRatio)
+
+
+
+
+
+
+# Ok, time to plot all of these things!
+# First focus on the sources
+folderName <- "isaAllFeatures"
+projection <- read.table(paste0("matlab_code/ISA/", folderName, "/projection_matrix.csv"), header = TRUE, sep = ",")
+z1Vals <- projection[projection$Row == "Z_{1}", ]
+z1Vals <- z1Vals[, -1]
+z2Vals <- projection[projection$Row == "Z_{2}", ]
+z2Vals <- z2Vals[, -1]
+
+eps <- 0.75
+labels <- read.table(paste0("data/isaMetadata/instanceFiltering/chosenFeatureseps", eps, ".txt"), header = TRUE, sep = " ")
+vals <- instancesOrdered[!labels$preclude, c("instances", "Source", "algo_kriging", "algo_cokriging", featuresKeptAll)]
+
+vals$z1 <- 0
+vals$z2 <- 0
+for(name in colnames(projection[-1])){
+  realName <- paste0("feature_", name)
+  vals$z1 <- vals$z1 + z1Vals[1, name] * vals[, realName]
+  vals$z2 <- vals$z2 + z2Vals[1, name] * vals[, realName]
+}
+
+
+# vals$Source <- factor(vals$Source, levels = c('Disturbance based instances', "Parameter-based", "Error-based", 'Fixed'))
+vals$Source <- factor(vals$Source, levels = c("Disturbance-based", "Literature", "SOLAR"))
+vals <- vals[order(vals$Source), ]
+mult <- 1
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6, 8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesAll.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals[vals$Source != "Disturbance-based", ], aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6,8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesSOLARandLit.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals[vals$Source == "SOLAR", ], aes(x = z1, y = z2, col = Source)) +
+  geom_point(size = 1) +
+  scale_color_manual(values=c("deepskyblue1", "yellow3", "brown3"), drop = FALSE) +
+  xlim(c(-4,4))+
+  ylim(c(-6,8)) +
+  theme_bw() +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sources")
+
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/sourcesSOLAR.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+# Will probably want the original... not sure how to go about this.
+# Maybe start with processing 
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_LCC_0_5)) +
+  geom_point(size = 0.5) +
+  # scale_color_gradient2(low = "blue1", mid = "orange", high = "red2") + 
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", LCC[0.5]^{0.2}))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSampleLCC05.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_LCCrel_0_9)) +
+  geom_point(size = 0.5) +
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", LCC[0.5]^{0.2^{1/d}}))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSampleLCCrel09.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+p <- ggplot(data = vals, aes(x = z1, y = z2, col = feature_sample_mid_ela_meta_lin_simple_adj_r2)) +
+  geom_point(size = 0.5) +
+  theme_classic() + 
+  xlim(c(-3.5,3.5))+
+  ylim(c(-6,8)) +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) +
+  ggtitle(expression(paste("Sample ", f[h] - f[l], " ", bar(R)[I]^2))) + 
+  labs(color = NULL)
+ggsave(paste0("matlab_code/ISA/", folderName, "/plots/featuresSamplemid_ela_meta_lin_simple_adj_r2.png"), plot = egg::set_panel_size(p=p, width=unit(mult*9, "cm"), height=unit(mult*9, "cm")),
+       width = mult*17, height = mult*12, units = "cm")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Ok at this point I am all done with ISA, the interesting thing would be to look
@@ -898,79 +1582,8 @@ cokrigZvals <- getVariable(matlab, "Z")[[1]]
 cokrigPredictions <- getVariable(matlab, "Yhat")[[1]]
 # close(matlab)
 
-projection <- read.table(paste0("C:/Users/nandr/Documents/InstanceSpace-master/trial/corrCondensedFinalWilcoxon", name, "/projection_matrix.csv"), header = TRUE, sep = ",")
-z1Vals <- projection[projection$Row == "Z_{1}", ]
-z1Vals <- z1Vals[, -1]
-z2Vals <- projection[projection$Row == "Z_{2}", ]
-z2Vals <- z2Vals[, -1]
-
-# vals <- chosenData[c(paste0("feature_", colnames(projection[-1])))]
-# vals$col <- 1
-# vals2 <- dataNormalised[c(paste0("feature_", colnames(projection[-1])))]
-# vals2$col <- 2
-# vals <- rbind(vals, vals2)
-vals <- chosenData
-
-vals$z1 <- 0
-vals$z2 <- 0
-for(name in colnames(projection[-1])){
-  realName <- paste0("feature_", name)
-  vals$z1 <- vals$z1 + z1Vals[1, name] * vals[, realName]
-  vals$z2 <- vals$z2 + z2Vals[1, name] * vals[, realName]
-}
-
-vals$labelKrig <- krigPredictions
-vals$labelCoKrig <- cokrigPredictions
-vals$zvalKrig <- krigZvals[, 1]
-vals$zvalCoKrig <- cokrigZvals[, 2]
-
-# vals <- vals[order(-vals$col), ]
-
-xVals <- c(min(vals$z1), max(vals$z1))
-yVals <- c(min(vals$z2), max(vals$z2))
-
-# savedVals <- vals
-
-vals[vals$Source == "COCO-Disturbance-based", "Source"] <- "New instances"
-vals[vals$Source == "Lit-Disturbance-based", "Source"] <- "New instances"
-vals[vals$Source == "Fixed", "Source"] <- "Literature instances"
-vals[vals$Source == "Parameter-based", "Source"] <- "Literature instances"
-vals[vals$Source == "Error-based", "Source"] <- "Literature instances"
 
 
-# vals$Source <- factor(vals$Source, levels = c('Disturbance based instances', "Parameter-based", "Error-based", 'Fixed'))
-vals$Source <- factor(vals$Source, levels = c('New instances', "Literature instances"))
-vals <- vals[order(vals$Source), ]
-
-
-p <- ggplot(data = vals[vals$Source == "Literature instances",], aes(x = z1, y = z2, col = Source)) +
-  # geom_point(shape = ".") +
-  geom_point(size = 0.5) +
-  scale_x_continuous(limits = c(-10, 10)) +
-  scale_y_continuous(limits = c(-6, 6)) +
-  scale_color_manual(values=c("chartreuse4", "brown3"), drop = FALSE) +
-  theme_bw() +
-  theme(text = element_text(size = 15)) +
-  ggtitle("Sources")
-
-mult <- 1
-
-ggsave("1-sourcesLit.png", plot = egg::set_panel_size(p=p, width=unit(mult*10, "cm"), height=unit(mult*10, "cm")),
-       width = mult*17, height = mult*12, units = "cm")
-
-p <- ggplot(data = vals, aes(x = z1, y = z2, col = Source)) +
-  geom_point(size = 0.5) +
-  scale_x_continuous(limits = c(-10, 10)) +
-  scale_y_continuous(limits = c(-6, 6)) +
-  scale_color_manual(values=c("chartreuse4", "brown3"), drop = FALSE) +
-  theme_bw() +
-  theme(text = element_text(size = 15)) +
-  ggtitle("Sources")
-
-mult <- 1
-
-ggsave("2-sourcesAll.png", plot = egg::set_panel_size(p=p, width=unit(mult*10, "cm"), height=unit(mult*10, "cm")),
-       width = mult*17, height = mult*12, units = "cm")
 #
 # p <- ggplot(data = vals, aes(x = z1, y = z2, col = Source)) +
 #   # geom_point(shape = ".") +
@@ -2485,4 +3098,17 @@ augmentedResultsReducedOld$labelled_algo_cokriging <- as.numeric(augmentedResult
 
 
 
+temp <- condensedData
+temp$diff <- temp$feature_real_CC - temp$feature_real_LCCrel_0_5
+
+
+
+
+test <- condensedData[condensedData$feature_sample_highFiBudgetRatio == 2, c(1:30, 135)]
+colnames(test)
+
+sum(condensedData$kriging_corrWilcoxon0.001 > 0.5)
+sum(condensedData$cokriging_corrWilcoxon0.001 > 0.5)
+sum(condensedData$kriging_errorWilcoxon0.001 > 0.5)
+sum(condensedData$cokriging_errorWilcoxon0.001 > 0.5)
 
