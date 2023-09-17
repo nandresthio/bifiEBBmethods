@@ -25,6 +25,8 @@ matlab_code/featureSelection/options.json
 matlab_code/ISA/*/
 # Ignore scripts used in the cluster
 scripts
+# Zipped data folder sent to figshare
+data.zip
 # Other
 MatlabServer.m
 .Rhistory
