@@ -1,4 +1,30 @@
-source("R_code/libraries.R")
+######################################################################################
+
+# Copyright 2023, Nicolau Andres-Thio
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+######################################################################################
+
+library(plyr)
+library(stringr)
+
 # Functions which take the experimental results and process them so that they can be plotted
 # and analysed
 
@@ -19,10 +45,6 @@ combineArrayResults <- function(runName, arrayStart, arrayEnd, jobsPerArray = 1,
       next
     }
     newData <- read.table(filename, header = TRUE, sep = " ", fill = TRUE)
-    if(nrow(newData) != 1200 & nrow(newData) != 50){
-      print(paste0("Weird, for this file have ", nrow(newData), " rows instead of 50 or 1200!"))
-      print(filename)
-    }
     combinedData <- rbind.fill(combinedData, newData)
   }
   if(printInfo){cat(" - done.\n")}
@@ -30,6 +52,7 @@ combineArrayResults <- function(runName, arrayStart, arrayEnd, jobsPerArray = 1,
   return(combinedData)
 }
 
+# Function which combines algorithm performance and features into a single data frame
 augmentData <- function(experimentalData, featuresData, algorithms){
   # Each instance is defined by the function pair, the high and low budgets, and the random seed
   instances <- unique(experimentalData$instances)
@@ -56,12 +79,6 @@ augmentData <- function(experimentalData, featuresData, algorithms){
   }
   finalData[, colnames(relevantSampleFeatureData)] <- relevantSampleFeatureData
   # Finally add source
-  # finalData$Source <- "Fixed"
-  # finalData[str_which(finalData$instances, "Wang", negate = FALSE), "Source"] = "Error-based"
-  # finalData[str_which(finalData$instances, "COCO", negate = FALSE), "Source"] = "COCO-Disturbance-based"
-  # finalData[str_which(finalData$instances, "Disturbance", negate = FALSE), "Source"] = "Lit-Disturbance-based"
-  # finalData[str_which(finalData$instances, "Toal", negate = FALSE), "Source"] = "Parameter-based"
-  # finalData[str_which(finalData$instances, "SOLAR", negate = FALSE), "Source"] = "SOLAR"
   finalData$Source <- "Literature"
   finalData[c(str_which(finalData$instances, "COCO", negate = FALSE),
               str_which(finalData$instances, "Disturbance", negate = FALSE)), "Source"] = "Disturbance-based"
@@ -69,8 +86,11 @@ augmentData <- function(experimentalData, featuresData, algorithms){
   return(finalData)
 }
 
+# Function which "condenses" information from the same instances with different
+# seeds into a single row in the final data frame. Algorithm performance
+# is aggregated using the mean and the median, and compared to other algorithms
+# using the wilcoxon test.
 condenseData <- function(data, algorithms){
-  
   split <- strsplit(data$instance, ",")
   instances <- unique(paste0(gsub("[(]", "", sapply(split, "[[", 1)), ",", sapply(split, "[[", 2), ",", sapply(split, "[[", 3)))
   
@@ -147,16 +167,6 @@ condenseData <- function(data, algorithms){
     output[row, "kriging_errorWilcoxon0.01"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.01, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0.01"] <- hypSame$p.value
-    
-    # hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, paired = TRUE, alternative = "less")
-    # output[row, "kriging_corrWilcoxon"] <- hypSame$p.value
-    # hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, paired = TRUE, alternative = "less")
-    # output[row, "cokriging_corrWilcoxon"] <- hypSame$p.value
-    # 
-    # hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, paired = TRUE, alternative = "g")
-    # output[row, "kriging_errorWilcoxon"] <- hypSame$p.value
-    # hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, paired = TRUE, alternative = "g")
-    # output[row, "cokriging_errorWilcoxon"] <- hypSame$p.value
   }
   return(output)
 }

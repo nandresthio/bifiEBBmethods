@@ -15,11 +15,22 @@
 /cpp_code/solar
 # Also do not track benchmarks repo which this code relies on
 /cpp_code/bifiEBBbenchmarks
-# Adding matlab folder which I don't want in the repo
-matlab_code
+# matlab folder should produce some files, ignore them
+# First do the files related to feature selection
+matlab_code/featureSelection/candidateFeatures.txt
+matlab_code/featureSelection/metadata.csv
+matlab_code/featureSelection/features.txt
+matlab_code/featureSelection/options.json
+
+# Ignore ISA folders with the conducted ISA, but keep actual code
+matlab_code/ISA/*/
+# Ignore scripts used in the cluster
+scripts
+# For now ignore data from ISA
+data/characterisingHarmfulDataSourcesISA/
+
+
 MatlabServer.m
 /data/isaMetadata/
 .Rhistory
 InputStreamByteWrapper.class
-# Don't want the scripts for the cluster
-scripts
