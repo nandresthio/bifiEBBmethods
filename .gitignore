@@ -4,12 +4,12 @@
 
 # Ignore certain files in the data folder
 /data/features/*.txt
-/data/features/filtering/*.txt
-/data/features/old
 /data/samplePlans/*.txt
 /data/clusterResults/*.txt
-# Scripts used for unimelb cluster
-# /scripts
+/data/isaMetadata/*.txt
+/data/isaMetadata/instanceFiltering/*.txt
+# Ignore data from ISA
+/data/characterisingHarmfulDataSourcesISA/
 # Solar black box simulator, do be downloaded from github to be used
 # Obviously don't want to save it to the repo
 /cpp_code/solar
@@ -21,16 +21,11 @@ matlab_code/featureSelection/candidateFeatures.txt
 matlab_code/featureSelection/metadata.csv
 matlab_code/featureSelection/features.txt
 matlab_code/featureSelection/options.json
-
 # Ignore ISA folders with the conducted ISA, but keep actual code
 matlab_code/ISA/*/
 # Ignore scripts used in the cluster
 scripts
-# For now ignore data from ISA
-data/characterisingHarmfulDataSourcesISA/
-
-
+# Other
 MatlabServer.m
-/data/isaMetadata/
 .Rhistory
 InputStreamByteWrapper.class

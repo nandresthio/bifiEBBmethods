@@ -1,0 +1,2 @@
+## ISA metadata 
+Metadata used for ISA. Note that the populated folder needs to be obtained from figshare. Currently holds the aggregated experimental results for surrogate modelling with fixed sample.
