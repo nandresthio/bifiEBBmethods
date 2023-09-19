@@ -870,7 +870,7 @@ double CoKriging::evaluateAcquisitionFunction(VectorXd x){
 
 		return integralVariance / (int)varianceTestPoints_.size();
 	}else{
-		return SurrogateModel::evaluateAcquisitionFunction(x);
+		return Kriging::evaluateAcquisitionFunction(x);
 	}
 }
 
