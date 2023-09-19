@@ -296,14 +296,14 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 }
 
 
-SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo){
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo, bool printSolverInfo){
 	SurrogateModel* model;
 	if(name.compare("kriging") == 0){
-		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, false);
+		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		model = new Kriging(function, auxSolver, seed, printInfo, true);
 		
 	}else if(name.compare("cokriging") == 0){
-		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, false);
+		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
 	}else{

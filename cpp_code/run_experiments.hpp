@@ -61,7 +61,7 @@ pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFideli
 
 // Given a name, this function initialises a child of the surrogateModel class. Currently accepts kriging and cokriging as the
 // options for a surrogate model. 
-SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo = true);
+SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo = true, bool printSolverInfo = false);
 
 // Function which implements the surrogateModelWithFixedSample problem type. Initialises a bifidelity function and a surrogate model,
 // and reads in (or generates if the file is non-existent) the sampling plan to be used for this particular sample size and seed. 

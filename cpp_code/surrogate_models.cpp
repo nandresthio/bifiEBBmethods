@@ -50,6 +50,8 @@ SurrogateModel::SurrogateModel(BiFidelityFunction* biFunction, AuxSolver* auxSol
 
 	maxObservation_ = DBL_MAX;
 	minObservation_ = DBL_MAX;
+
+	chosenAcquisiton_ = "";
 }
 
 SurrogateModel::~SurrogateModel(){
@@ -132,9 +134,40 @@ void SurrogateModel::saveSample(vector<VectorXd> &points, vector<VectorXd> &poin
 	sampledPointsLow_ = pointsLow;
 	sampledPointsValues_ = observations;
 	sampledPointsValuesLow_ = observationsLow;
-	
-	
 }
+
+void SurrogateModel::addSample(VectorXd point, bool sampleHigh, bool sampleLow){
+	// First evaluate each of the sources if relevant
+	if(!sampleHigh && !sampleLow){
+		printf("Note: calling this addSample method is doing nothing as both sampleHigh and sampleLow are set as false!\n");
+
+	}else if(sampleHigh && !sampleLow){
+		double valHigh = scaleObservation(biFunction_->evaluate(point));
+		scalePoint(point);
+		sampledPoints_.push_back(point);
+		sampledPointsValues_.push_back(valHigh);
+		if(valHigh > maxObservation_){maxObservation_ = valHigh;}
+		if(valHigh < minObservation_){minObservation_ = valHigh;}
+		
+
+	}else if(!sampleHigh && sampleLow){
+		double valLow = scaleObservation(biFunction_->evaluateLow(point));
+		scalePoint(point);
+		sampledPointsLow_.push_back(point);
+		sampledPointsValuesLow_.push_back(valLow);
+	}else{
+		double valHigh = scaleObservation(biFunction_->evaluate(point));
+		double valLow = scaleObservation(biFunction_->evaluateLow(point));
+		scalePoint(point);
+		sampledPoints_.push_back(point);
+		sampledPointsLow_.push_back(point);
+		sampledPointsValues_.push_back(valHigh);
+		sampledPointsValuesLow_.push_back(valLow);
+		if(valHigh > maxObservation_){maxObservation_ = valHigh;}
+		if(valHigh < minObservation_){minObservation_ = valHigh;}
+	}
+}
+
 
 
 void SurrogateModel::trainModel(){
@@ -156,8 +189,47 @@ double SurrogateModel::surfaceValue(VectorXd &x, bool pointIsScaled, bool unscal
 }
 
 
+double SurrogateModel::evaluateAcquisitionFunction(VectorXd x){
+	if(chosenAcquisiton_.compare("surface") == 0){
+		return surfaceValue(x);
+	}else if(chosenAcquisiton_.compare("") == 0){
+		printf("Error, asking to evaluate acquisition function without first definition what function to use! Stopping now...\n");
+		exit(0);
+	}else{
+		printf("Error, asking to evaluate acquisition function with the unkown acquisition %s! Stopping now...\n", chosenAcquisiton_.c_str());
+		exit(0);
+	}
+}
 
+void SurrogateModel::setAquisitionFunction(string chosenAcquisiton){
+	if(chosenAcquisiton.compare("surface") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = true;
+	}else{
+		printf("Error, unkown acquisiton function %s specified! Stopping now...\n", chosenAcquisiton.c_str());
+		exit(0);
+	}
+}
 
+VectorXd SurrogateModel::findNextSampleSite(){
+	// Ok, so idea is simply to initialise solver and run it!
+	AcquisitionFunction* function = new AcquisitionFunction(this);
+	auxSolver_->updateProblem(function, acquisitionIsMin_);
+	VectorXd nextSampleSite = auxSolver_->optimise();
+	delete function;
+	return nextSampleSite;
+}
+
+SurrogateModel::AcquisitionFunction::AcquisitionFunction(SurrogateModel* surrogateModel):
+	Function(surrogateModel->biFunction_->d_, surrogateModel->biFunction_->lowerBound_, surrogateModel->biFunction_->upperBound_),
+	surrogateModel_(surrogateModel){}
+
+SurrogateModel::AcquisitionFunction::~AcquisitionFunction(){}
+
+double SurrogateModel::AcquisitionFunction::evaluate(VectorXd &point){
+	// Simply call the evaluate acquisition function, and return that
+	return surrogateModel_->evaluateAcquisitionFunction(point);
+}
 
 
 
@@ -305,6 +377,8 @@ double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscal
 		s_x = unscaleObservation(s_x);
 		var = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * var;
 	}
+	// If variance is close enough to 0, expected improvement is set to 0
+	if(abs(var) < TOL){return 0;}
 	// Need to decide whether we are working with a scaled model or not.
 	// If yes, the min value is 0 (as it is scaled).
 	// Otherwise need to use the true minimum
@@ -342,6 +416,59 @@ tuple<double, double> Kriging::meanVarianceCalculator(VectorXd &x){
 	
 	return make_tuple(s_x, variance);
 }
+
+double Kriging::evaluateAcquisitionFunction(VectorXd x){
+	if(chosenAcquisiton_.compare("variance") == 0){
+		return uncertainty(x);
+	}else if(chosenAcquisiton_.compare("globalVariance") == 0){
+		// If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
+		// Get predicted surface value
+		double predictedValue = scaleObservation(surfaceValue(x));
+		scalePoint(x);
+		sampledPoints_.push_back(x);
+		sampledPointsValues_.push_back(predictedValue);
+		saveMuSigma();
+		double integralVariance = 0;
+		for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
+			integralVariance += uncertainty(varianceTestPoints_[i]);
+		}
+		// Now need to remove the points and save parameters again
+		sampledPoints_.pop_back();
+		sampledPointsValues_.pop_back();
+		saveMuSigma();
+		return integralVariance / (int)varianceTestPoints_.size();
+	}else if(chosenAcquisiton_.compare("expectedImprovement") == 0){
+		return expectedImprovement(x);
+	}else{
+		return SurrogateModel::evaluateAcquisitionFunction(x);
+	}
+}
+
+void Kriging::setAquisitionFunction(string chosenAcquisiton){
+	if(chosenAcquisiton.compare("variance") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = false;
+	}else if(chosenAcquisiton.compare("globalVariance") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = true;
+		// Need to define a set of reference points to assess global variance
+		varianceTestPoints_ = sampleGenerator_->randomLHS(100 * biFunction_->d_);
+	}else if(chosenAcquisiton.compare("expectedImprovement") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = false;
+	}else{
+		SurrogateModel::setAquisitionFunction(chosenAcquisiton);
+	}
+}
+
+VectorXd Kriging::findNextSampleSite(){
+	// If dealing with globalVariance, choose a random set of points for monte-carlo integration
+	if(chosenAcquisiton_.compare("globalVariance") == 0){
+		varianceTestPoints_ = sampleGenerator_->randomLHS(100 * biFunction_->d_);
+	}
+	return SurrogateModel::findNextSampleSite();
+}
+
 
 double Kriging::concentratedLikelihoodFunction(){
 	// Get info needed, data contains mu, sigma, R and R^-1 in that order
@@ -434,68 +561,6 @@ int Kriging::ConcentratedLikelihoodFunction::betterPoint(VectorXd &point1, doubl
 
 
 
-// VectorXd Kriging::chooseNextSampleSite(string technique){
-// 	if(printInfo_){printf("Choosing next sample.");}
-// 	bool min;
-// 	// When this is called, first define any values that might be needed, then define next sample function, and optimise it!
-// 	if(technique.compare("expectedImprovement") == 0){
-// 		// Will need to know the minimum.
-// 		// This should be known, as when adding a sample the values are automatically scaled
-// 		min = false;
-// 	}else if(technique.compare("maximumVariance") == 0){
-// 		// Should not need any extra information
-// 		min = false;
-// 	}else{
-// 		printf("Asking for next sample site with undefined technique! Stopping now...\n");
-// 		exit(0);
-// 	}
-
-// 	// Define function, update aux solver, and find the point!
-// 	nextSampleSiteFunction* function = new nextSampleSiteFunction(ebbFunction_->d_, ebbFunction_->lowerBound_, ebbFunction_->upperBound_, this, technique);
-// 	auxSolver_->updateProblem(function, min);
-// 	VectorXd nextSite = auxSolver_->optimise();
-// 	if(printInfo_){
-// 		printf(" Chosen point ");
-// 		printPoint(nextSite);
-// 		printf(" with value %.5f\n", function->evaluate(nextSite));
-// 	}
-// 	delete function;
-// 	return nextSite;
-// }
-
-
-
-
-// Kriging::nextSampleSiteFunction::nextSampleSiteFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, Kriging* model, string technique):
-// 	Function(d, lowerBound, upperBound),
-// 	model_(model),
-// 	technique_(technique){}
-
-// Kriging::nextSampleSiteFunction::~nextSampleSiteFunction(){}
-
-// double Kriging::nextSampleSiteFunction::evaluate(VectorXd &point){
-// 	// Simply query the right function from the model
-// 	if(technique_.compare("expectedImprovement") == 0){
-// 		return model_->expectedImprovement(point);
-// 	}else if(technique_.compare("maximumVariance") == 0){
-// 		return model_->uncertainty(point);
-// 	}else{
-// 		printf("Using next sample function with undefined sampling strategy! Stopping now...\n");
-// 		exit(0);
-// 	}
-// 	return 0;
-// }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -564,7 +629,8 @@ void CoKriging::trainHyperparameters(){
 	lowerBound[2*d] = -1000;
 	upperBound[2*d] = 1000;
 
-	// Store low fi surface values at high fi locations
+	// Store low fi surface values at high fi locations, clear vector if it was populated
+	lowFiSurfaceValues_.clear();
 	lowFiSurfaceValues_.reserve((int)sampledPoints_.size());
 	for(int i = 0; i < (int)sampledPoints_.size(); i++){
 		// Don't want to return scaled predictions from the low fi model, as internally everything is scaled (if it was requested by the user)
@@ -770,6 +836,49 @@ tuple<double, double> CoKriging::meanVarianceCalculator(VectorXd &x){
 	
 	return make_tuple(s_x, variance);
 }
+
+double CoKriging::evaluateAcquisitionFunction(VectorXd x){
+	if(chosenAcquisiton_.compare("globalVariance") == 0){
+		// If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
+		// Get predicted surface value
+		double predictedValue = scaleObservation(surfaceValue(x));
+		double predictedValueLow = scaleObservation(lowFiKriging_->surfaceValue(x));
+		scalePoint(x);
+		sampledPoints_.push_back(x);
+		sampledPointsLow_.push_back(x);
+		lowFiKriging_->sampledPoints_.push_back(x);
+
+		sampledPointsValues_.push_back(predictedValue);
+		sampledPointsValuesLow_.push_back(predictedValueLow);
+		lowFiKriging_->sampledPointsValues_.push_back(predictedValueLow);
+
+		lowFiKriging_->saveMuSigma();
+		lowFiSurfaceValues_.push_back(predictedValueLow);
+		saveMuSigma();
+
+		double integralVariance = 0;
+		for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
+			integralVariance += uncertainty(varianceTestPoints_[i]);
+		}
+		// Now need to remove the points and save parameters again
+		sampledPoints_.pop_back();
+		sampledPointsLow_.pop_back();
+		lowFiKriging_->sampledPoints_.pop_back();
+		sampledPointsValues_.pop_back();
+		sampledPointsValuesLow_.pop_back();
+		lowFiKriging_->sampledPointsValues_.pop_back();
+
+		lowFiKriging_->saveMuSigma();
+		lowFiSurfaceValues_.pop_back();
+		saveMuSigma();
+
+		return integralVariance / (int)varianceTestPoints_.size();
+	}else{
+		return SurrogateModel::evaluateAcquisitionFunction(x);
+	}
+}
+
+
 
 CoKriging::IntermediateConcentratedLikelihoodFunction::IntermediateConcentratedLikelihoodFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, CoKriging* cokrigingModel):
 	Function(d, lowerBound, upperBound),

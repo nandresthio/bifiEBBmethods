@@ -98,19 +98,47 @@ public:
 	// within [0,1]. In order to stop this scaling, set functionScaling to false when initialising the surrogate model.
 	virtual void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
 
+	// Function which adds a point to the saved sample. It evaluates the high-fidelity source and/or the low-fidelity source, scales
+	// the resulting values and adds them to the stored data.
+	void addSample(VectorXd point, bool sampleHigh, bool sampleLow);
+
 	// Parent function to train model. For this class this is empty and should not be called; each of the derived classes
 	// implement this based on how each of the models is trained.
 	virtual void trainModel();
 
 	// Returns the surrogate surface value prediction at a point. It is assumed the point is unscaled i.e. it lies in the domain
 	// of the specified biFunction, and that the desired output should not be scaled i.e. it should lie near the range of the biFunction.
-	// Internally these flags might be modified to account for internal scaling. Note this function is function should also not
+	// Internally these flags might be modified to account for internal scaling. Note this function should not
 	// be called at this level, and instead should be implemented in each of the children classes.
 	virtual double surfaceValue(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Function which returns a vector with the surrogate surgace value precitions for a set of points. For further details
 	// look at the surfaceValue function above. 
 	vector<double> multipleSurfaceValues(vector<VectorXd> &points, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	// Returns the evaluation of the acquisition function at a particular location. It is assumed the point is unscaled i.e. it lies in the domain
+	// of the specified biFunction. Internally this flag might be modified to account for internal scaling. Note this function should not
+	// be called at this level, and instead should be implemented in each of the children classes.
+	virtual double evaluateAcquisitionFunction(VectorXd x);
+
+	// Function which defines which acquisiton function should be used. To see what acquisition functions are
+	// defined consult the evaluateAcquisitionFunction definition in derived classes.
+	virtual void setAquisitionFunction(string chosenAcquisiton);
+
+	// Finds the location of the next sampling site, based on an already specified acquisition function
+	virtual VectorXd findNextSampleSite();
+
+	class AcquisitionFunction : public Function{
+		public:
+	
+		AcquisitionFunction(SurrogateModel* surrogateModel);
+
+		~AcquisitionFunction();
+
+		virtual double evaluate(VectorXd &point) override;
+
+		SurrogateModel* surrogateModel_; 	// Reference to surrogate model needed to evaluate the acquisition function
+	};
 
 
 	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
@@ -131,7 +159,10 @@ public:
 
 	bool trainedModel_;						// bool which indicates whether model has been trained, used in order to assess whether model values can be calculated.
 
+	string chosenAcquisiton_;				// String which defines what the acquisition function should be.
+	bool acquisitionIsMin_;					// Bool which defines whether the aquisition function is being minimised or maximised.
 
+	vector<VectorXd> varianceTestPoints_;	// Locations used to estimate the integral of the variance, used for acquisition function based on overall variance reduction
 };
 
 
@@ -175,6 +206,18 @@ class Kriging : public SurrogateModel{
 
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x);
+
+	// Returns the evaluation of the acquisition function at a particular location. It is assumed the point is unscaled i.e. it lies in the domain
+	// of the specified biFunction. Internally this flag might be modified to account for internal scaling. Note this function should not
+	// be called at this level, and instead should be implemented in each of the children classes.
+	virtual double evaluateAcquisitionFunction(VectorXd x) override;
+
+	// Function which defines which acquisiton function should be used. To see what acquisition functions are
+	// defined consult the evaluateAcquisitionFunction definition in derived classes.
+	virtual void setAquisitionFunction(string chosenAcquisiton) override;
+
+	// Finds the location of the next sampling site, based on an already specified acquisition function
+	virtual VectorXd findNextSampleSite() override;
 
 	// Calculates the concentrated likelihood function using the stored hyperparameters
 	double concentratedLikelihoodFunction();
@@ -259,6 +302,11 @@ class CoKriging: public Kriging{
 
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
+
+	// Returns the evaluation of the acquisition function at a particular location. It is assumed the point is unscaled i.e. it lies in the domain
+	// of the specified biFunction. Internally this flag might be modified to account for internal scaling. Note this function should not
+	// be called at this level, and instead should be implemented in each of the children classes.
+	virtual double evaluateAcquisitionFunction(VectorXd x) override;
 
 	// Calculates the log likelihood function of the intermediate (i.e. error) model using the stored hyperparameters.
 	double intermediateConcentratedLikelihoodFunction();
