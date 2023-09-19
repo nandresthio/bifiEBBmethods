@@ -140,32 +140,27 @@ void SurrogateModel::addSample(VectorXd point, bool sampleHigh, bool sampleLow){
 	// First evaluate each of the sources if relevant
 	if(!sampleHigh && !sampleLow){
 		printf("Note: calling this addSample method is doing nothing as both sampleHigh and sampleLow are set as false!\n");
-
-	}else if(sampleHigh && !sampleLow){
-		double valHigh = scaleObservation(biFunction_->evaluate(point));
-		scalePoint(point);
-		sampledPoints_.push_back(point);
-		sampledPointsValues_.push_back(valHigh);
-		if(valHigh > maxObservation_){maxObservation_ = valHigh;}
-		if(valHigh < minObservation_){minObservation_ = valHigh;}
-		
-
-	}else if(!sampleHigh && sampleLow){
-		double valLow = scaleObservation(biFunction_->evaluateLow(point));
-		scalePoint(point);
-		sampledPointsLow_.push_back(point);
-		sampledPointsValuesLow_.push_back(valLow);
-	}else{
-		double valHigh = scaleObservation(biFunction_->evaluate(point));
-		double valLow = scaleObservation(biFunction_->evaluateLow(point));
-		scalePoint(point);
-		sampledPoints_.push_back(point);
-		sampledPointsLow_.push_back(point);
-		sampledPointsValues_.push_back(valHigh);
-		sampledPointsValuesLow_.push_back(valLow);
-		if(valHigh > maxObservation_){maxObservation_ = valHigh;}
-		if(valHigh < minObservation_){minObservation_ = valHigh;}
 	}
+	// Just unscale everything, and save it again!
+	unscalePoints(sampledPoints_);
+	unscalePoints(sampledPointsLow_);
+	unscaleObservations(sampledPointsValues_);
+	unscaleObservations(sampledPointsValuesLow_);
+
+	if(sampleHigh){
+		double valHigh = biFunction_->evaluate(point);
+		sampledPoints_.push_back(point);
+		sampledPointsValues_.push_back(valHigh);
+	}
+
+	if(sampleLow){
+		double valLow = biFunction_->evaluateLow(point);
+		sampledPointsLow_.push_back(point);
+		sampledPointsValuesLow_.push_back(valLow);
+	}
+
+	// And now save it again!
+	saveSample(sampledPoints_, sampledPointsLow_, sampledPointsValues_, sampledPointsValuesLow_);
 }
 
 
@@ -587,6 +582,7 @@ CoKriging::~CoKriging(){}
 
 
 void CoKriging::saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow){
+	printf("Got here!\n");
 	// First to the usual saving of the data
 	SurrogateModel::saveSample(points, pointsLow, observations, observationsLow);
 	// And now save the relevant things to lowFiKriging

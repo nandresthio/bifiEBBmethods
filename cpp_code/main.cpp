@@ -33,7 +33,7 @@ int main(int argc, char *argv[]){
 
 
 	BiFidelityFunction* function = processFunctionName("ToalBranin0.00");
-	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, 10, 20, 1, true);
+	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, 5, 10, 1, true);
 	vector<VectorXd> sampledPoints = points.first;
 	vector<VectorXd> sampledPointsLow = points.second;
 	vector<double> sampledPointsValues = function->evaluateMany(sampledPoints);
@@ -44,24 +44,55 @@ int main(int argc, char *argv[]){
 	model->trainModel();
 	VectorXd point;
 
-	model->setAquisitionFunction("surface");
-	point = model->findNextSampleSite();
-	model->setAquisitionFunction("globalVariance");
-	point = model->findNextSampleSite();
-	model->setAquisitionFunction("surface");
-	point = model->findNextSampleSite();
+	// model->setAquisitionFunction("surface");
+	// point = model->findNextSampleSite();
+	// model->setAquisitionFunction("globalVariance");
+	// point = model->findNextSampleSite();
+	// model->setAquisitionFunction("surface");
+	// point = model->findNextSampleSite();
 
 	printf("\nDone testing\n");
 
+
+	printf("Points\n");
+	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+		printPoint(model->sampledPoints_[i]);
+		printf(" %.2f\n", model->sampledPointsValues_[i]);
+	}
+	printf("Points low\n");
+	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+		printPoint(model->sampledPointsLow_[i]);
+		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	}
 
 	printf("\nGlobal variance based sample\n");
 	model->setAquisitionFunction("globalVariance");
 	point = model->findNextSampleSite();
 	model->addSample(point, true, true);
+	printf("Points\n");
+	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+		printPoint(model->sampledPoints_[i]);
+		printf(" %.2f\n", model->sampledPointsValues_[i]);
+	}
+	printf("Points low\n");
+	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+		printPoint(model->sampledPointsLow_[i]);
+		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	}
 	model->trainModel();
 	point = model->findNextSampleSite();
 	model->addSample(point, true, true);
 	model->trainModel();
+	printf("Points\n");
+	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+		printPoint(model->sampledPoints_[i]);
+		printf(" %.2f\n", model->sampledPointsValues_[i]);
+	}
+	printf("Points low\n");
+	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+		printPoint(model->sampledPointsLow_[i]);
+		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	}
 	printf("\nDone with global variance based\n");
 
 	printf("\nSurface based sample\n");
