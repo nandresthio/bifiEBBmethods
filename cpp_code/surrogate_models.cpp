@@ -378,7 +378,7 @@ double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscal
 	// If yes, the min value is 0 (as it is scaled).
 	// Otherwise need to use the true minimum
 	if(unscaleOutput || !functionScaling_){
-		value = (fMin_ - s_x)/sqrt(var);
+		value = (minObservation_ - s_x)/sqrt(var);
 	}else{
 		value = (0 - s_x)/sqrt(var);
 	}

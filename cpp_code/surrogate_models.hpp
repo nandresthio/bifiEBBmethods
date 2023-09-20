@@ -251,8 +251,6 @@ class Kriging : public SurrogateModel{
 
 
 	double maxLogLikelihood_;				// Maximum loglikelihood observed so far, stored for tie breaker purposes for certain training approaches.
-
-	double fMin_;							// Minimum objective function value observed so far.
 };
 
 
