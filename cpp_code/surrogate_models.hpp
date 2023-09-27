@@ -123,10 +123,11 @@ public:
 
 	// Function which defines which acquisiton function should be used. To see what acquisition functions are
 	// defined consult the evaluateAcquisitionFunction definition in derived classes.
-	virtual void setAquisitionFunction(string chosenAcquisiton);
+	virtual void setAcquisitionFunction(string chosenAcquisiton);
 
 	// Finds the location of the next sampling site, based on an already specified acquisition function
-	virtual VectorXd findNextSampleSite();
+	// Returns the location and two booleans specifying whether the high / low sources should be sampled
+	virtual tuple<VectorXd, bool, bool> findNextSampleSite();
 
 	class AcquisitionFunction : public Function{
 		public:
@@ -160,9 +161,7 @@ public:
 	bool trainedModel_;						// bool which indicates whether model has been trained, used in order to assess whether model values can be calculated.
 
 	string chosenAcquisiton_;				// String which defines what the acquisition function should be.
-	bool acquisitionIsMin_;					// Bool which defines whether the aquisition function is being minimised or maximised.
-
-	vector<VectorXd> varianceTestPoints_;	// Locations used to estimate the integral of the variance, used for acquisition function based on overall variance reduction
+	bool acquisitionIsMin_;					// Bool which defines whether the acquisition function is being minimised or maximised.
 };
 
 
@@ -204,6 +203,8 @@ class Kriging : public SurrogateModel{
 	// Returns the expected improvement at a point; assumption is we are minimising
 	double expectedImprovement(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
+	double globalVarianceReduction(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x);
 
@@ -214,10 +215,10 @@ class Kriging : public SurrogateModel{
 
 	// Function which defines which acquisiton function should be used. To see what acquisition functions are
 	// defined consult the evaluateAcquisitionFunction definition in derived classes.
-	virtual void setAquisitionFunction(string chosenAcquisiton) override;
+	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
 
 	// Finds the location of the next sampling site, based on an already specified acquisition function
-	virtual VectorXd findNextSampleSite() override;
+	virtual tuple<VectorXd, bool, bool> findNextSampleSite() override;
 
 	// Calculates the concentrated likelihood function using the stored hyperparameters
 	double concentratedLikelihoodFunction();
@@ -248,9 +249,11 @@ class Kriging : public SurrogateModel{
 	MatrixXd rMatrix_;						// R matrix, stored for speed
 	LDLT<MatrixXd> rMatrixDecomposition_;	// R matrix decomposition, stored for speed instead of the inverse as this is faster.
 	MatrixXd modelWeights_;					// To save time when needing predictions, save the multiplication of the system solved when training the model.
-
+	MatrixXd rMatrixInverse_;				// Again, to save time this matrix is stored once the hyperparameters have been chosen. It is calculated once and it is faster than using solve with the decomposition (if the inverse is only calculated once).
 
 	double maxLogLikelihood_;				// Maximum loglikelihood observed so far, stored for tie breaker purposes for certain training approaches.
+
+	vector<VectorXd> varianceTestPoints_;	// Locations used to estimate the integral of the variance, used for acquisition function based on overall variance reduction
 };
 
 
@@ -306,6 +309,9 @@ class CoKriging: public Kriging{
 	// be called at this level, and instead should be implemented in each of the children classes.
 	virtual double evaluateAcquisitionFunction(VectorXd x) override;
 
+	// Finds the location of the next sampling site, based on an already specified acquisition function
+	virtual tuple<VectorXd, bool, bool> findNextSampleSite() override;
+
 	// Calculates the log likelihood function of the intermediate (i.e. error) model using the stored hyperparameters.
 	double intermediateConcentratedLikelihoodFunction();
 	
@@ -337,6 +343,7 @@ class CoKriging: public Kriging{
 	double muCombined_;						// Mu of the combined model.
 	MatrixXd cMatrix_;						// C matrix, stored for speed of future calculations.
 	LDLT<MatrixXd> cMatrixDecomposition_;	// C matrix decomposition, stored for speed of future calculations.
+	MatrixXd cMatrixInverse_;				// Again, to save time this matrix is stored once the hyperparameters have been chosen. It is calculated once and it is faster than using solve with the decomposition (if the inverse is only calculated once).
 
 };
 

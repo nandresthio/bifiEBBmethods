@@ -37,8 +37,29 @@ createScriptStructure <- function(problemTypes, methods, functions, highFiBudget
       for(func in functions){
         for(seedStart in seq(seedsStart, seedsEnd, seedsPerRun)){
           jobs <- jobs + 1
-          if(printInfo){print(paste0("Working on job ", jobs, " for krig"))}
+          if(printInfo){print(paste0("Working on job ", jobs))}
           data <- c(problemType, paste0("(", func, "," , highFiBudget, ",", lowFiBudget, ",", paste0(seedStart, "-", min(seedStart + seedsPerRun - 1, seedsEnd)), ")"), method)
+          runData[jobs, ] <- data
+        }
+      }
+    }
+  }
+  colnames(runData) <- c("problemType", "problem", "method")
+  if(printInfo){print(paste0("Created script with ", jobs, " jobs"))}
+  return(runData)
+}
+
+# Need the same function for surrogate model with given budget
+createSingleSeedScriptStructure <- function(problemTypes, methods, functions, budget, costRatio, seedsStart = 1, seedsEnd = 20, printInfo = FALSE){
+  jobs <- 0
+  runData <- data.frame(matrix(ncol = 3, nrow = 0))
+  for(problemType in problemTypes){
+    for(method in methods){
+      for(func in functions){
+        for(seed in seq(seedsStart, seedsEnd)){
+          jobs <- jobs + 1
+          if(printInfo){print(paste0("Working on job ", jobs))}
+          data <- c(problemType, paste0("(", func, "," , budget, ",", costRatio, ",", seed, ")"), method)
           runData[jobs, ] <- data
         }
       }
@@ -201,6 +222,40 @@ for(i in 1:length(functions)){
 write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithFixedSampleSOLAR.txt", quote = FALSE, row.names = FALSE)
 
 
+
+
+functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN312.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
+# Order them by dimension
+features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
+order <- match(functions, features$instances)
+dims <- features[order, 'feature_dimension']
+functions <- functions[order(match(dims, 1:20))]
+index <- 0
+for(i in 1:length(functions)){
+  func <- functions[[i]]
+  print(func)
+  for(model in c("kriging")){
+    for(acquisition in c("variance", "globalVariance")){
+      for(doe in c("small", "half", "all")){
+        method <- paste0(model, "_", acquisition, "_", doe)
+        for(budget in c(5, 10, 15, 20)){
+          if(doe == "small" & budget != 20){next}
+          if(doe == "all" & acquisition != "globalVariance"){next}
+          for(costRatio in c(0)){
+            index <- index + 1
+            runData <- createSingleSeedScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = 40)
+            if(index != 1){
+              existingRunData <- rbind(existingRunData, runData)
+            }else{
+              existingRunData <- runData
+            }
+          }
+        }
+      }
+    }
+  }
+}
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKriging.txt", quote = FALSE, row.names = FALSE)
 
 
 

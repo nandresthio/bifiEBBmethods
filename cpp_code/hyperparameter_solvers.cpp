@@ -32,12 +32,10 @@
 
 
 AmoebaSolver::AmoebaSolver(Function* function, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(50 * function->d_){}
+	AuxSolver(function, 50 * function->d_, min, randomSeed, printInfo){}
 
 AmoebaSolver::AmoebaSolver(Function* function, int maxEval, bool min, int randomSeed, bool printInfo):
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(maxEval){}
+	AuxSolver(function, maxEval, min, randomSeed, printInfo){}
 
 AmoebaSolver::~AmoebaSolver(){
 }
@@ -212,13 +210,11 @@ VectorXd AmoebaSolver::optimise(vector<VectorXd> simplexPoints, vector<double> s
 
 
 GASolver::GASolver(Function* function, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(10000),
+	AuxSolver(function, 10000, min, randomSeed, printInfo),
 	populationSize_(50){}
 
 GASolver::GASolver(Function* function, int maxEval, int populationSize, bool min, int randomSeed, bool printInfo):
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(maxEval),
+	AuxSolver(function, maxEval, min, randomSeed, printInfo),
 	populationSize_(populationSize){}
 
 GASolver::~GASolver(){
@@ -309,12 +305,10 @@ VectorXd GASolver::optimise(vector<VectorXd> population, vector<double> populati
 
 
 DynamicHillClimberSolver::DynamicHillClimberSolver(Function* function, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(5000){}
+	AuxSolver(function, 5000, min, randomSeed, printInfo){}
 
 DynamicHillClimberSolver::DynamicHillClimberSolver(Function* function, int maxEval, bool min, int randomSeed, bool printInfo):
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(maxEval){}
+	AuxSolver(function, maxEval, min, randomSeed, printInfo){}
 
 DynamicHillClimberSolver::~DynamicHillClimberSolver(){
 }
@@ -465,13 +459,11 @@ vector<VectorXd> DynamicHillClimberSolver::initialiseDirections(){
 
 
 HeavyTuneSolver::HeavyTuneSolver(Function* function, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(10000),
+	AuxSolver(function, 10000, min, randomSeed, printInfo),
 	popSizeGA_(50){}
 
 HeavyTuneSolver::HeavyTuneSolver(Function* function, int maxEval, int popSizeGA, bool min, int randomSeed, bool printInfo):
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(maxEval),
+	AuxSolver(function, maxEval, min, randomSeed, printInfo),
 	popSizeGA_(popSizeGA){}
 
 HeavyTuneSolver::~HeavyTuneSolver(){
@@ -540,13 +532,11 @@ VectorXd HeavyTuneSolver::optimise(){
 
 
 RandomHeavyTuneSolver::RandomHeavyTuneSolver(Function* function, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(10000),
+	AuxSolver(function, 10000, min, randomSeed, printInfo),
 	numSphereARS_(10){}
 
 RandomHeavyTuneSolver::RandomHeavyTuneSolver(Function* function, int maxEval, int numSphereARS, bool min, int randomSeed, bool printInfo) :
-	AuxSolver(function, min, randomSeed, printInfo),
-	maxEval_(maxEval),
+	AuxSolver(function, maxEval, min, randomSeed, printInfo),
 	numSphereARS_(numSphereARS){}
 
 RandomHeavyTuneSolver::~RandomHeavyTuneSolver(){
@@ -603,7 +593,6 @@ VectorXd RandomHeavyTuneSolver::optimise(){
 	delete dhsSolver;
 	return currentBestPoint;
 }
-
 
 
 

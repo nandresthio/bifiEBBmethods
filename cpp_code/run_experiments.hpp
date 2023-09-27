@@ -67,6 +67,10 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 // and reads in (or generates if the file is non-existent) the sampling plan to be used for this particular sample size and seed. 
 void assessSurrogateModelWithFixedSample(string outputFilename, string problemType, string functionName, int highFiBudget, int lowFiBudget, int seed, string method, bool printInfo = true);
 
+// Function which implementes the surrogateModelWithBudget problem type. Initialises a bifidelity function and a surrogate model
+// with a specified acquisition function, reads in (or generates if the file is non-existence) a sampling plan, and iteratively
+// samples the bifidelity function until the whole budget has been used up.
+void assessSurrogateModelWithBudget(string outputFilename, string problemType, string functionName, int budget, double costRatio, int seed, string method, bool printInfo = true);
 
 
 #endif

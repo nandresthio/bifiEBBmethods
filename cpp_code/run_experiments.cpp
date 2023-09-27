@@ -74,8 +74,17 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 			}
 		}
 	}else if(problemType.compare("surrogateModelWithBudget") == 0 || problemType.compare("optimisationWithBudget") == 0){
-		// Need to do something here, not yet implemented
-		printf("Not yet implemented!\n");
+		stringstream ss2(problem);
+		string token2;
+		getline(ss2, token2, ',');
+		string functionName = token2;
+		getline(ss2, token2, ',');
+		int budget = stoi(token2);
+		getline(ss2, token2, ',');
+		double costRatio = stof(token2);
+		getline(ss2, token2, ',');
+		int seed = stoi(token2);
+		assessSurrogateModelWithBudget(outputFilename, problemType, functionName, budget, costRatio, seed, method);
 	}else{
 		printf("Problem, do not recognise problem type in run file! Must be one of sampleCreation, surrogateModelWithFixedSample, surrogateModelWithBudget or optimisationWithBudget. Stopping now...\n");
 		exit(0);
@@ -307,7 +316,7 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
 	}else{
-		printf("Problem: Could not match method name!! Stopping here...\n");							
+		printf("Problem: Could not match method name! Specified %s. Stopping here...\n", name.c_str());							
 		exit(0);
 	}
 
@@ -396,6 +405,173 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 
 
 
+void assessSurrogateModelWithBudget(string outputFilename, string problemType, string functionName, int budget, double costRatio, int seed, string method, bool printInfo){
+	clock_t tstart;
+	tstart = clock();
+	// First initialise function generator and solver
+	BiFidelityFunction* function;
+	// Have an extra line here for SOLAR instances, to add a unique file name to the end of the instance name
+	if(functionName.compare(0, 5, "SOLAR") == 0){
+		string appendedName = functionName + to_string(budget) + to_string(costRatio) + to_string(seed) + method;
+		function = processFunctionName(appendedName);	
+	}else{
+		function = processFunctionName(functionName);
+	}
+
+	int realBudget = budget * function->d_;
+
+	// Actually I think the method should specify the surrogate model, the acquisition function, and the initial sampling approach
+	// So start by splitting up the three components
+	stringstream ss(method);
+	string token;
+	getline(ss, token, '_');
+	string surrogateName = token;
+	getline(ss, token, '_');
+	string acquisitionFunction = token;
+	getline(ss, token, '_');
+	string designOfExperimentsApproach = token;
+
+	// Initialise model and design of experiments
+	SurrogateModel* model = processModelName(surrogateName, function, seed, true, false);
+	model->setAcquisitionFunction(acquisitionFunction);
+
+	printf("Here good!\n");
+
+	// Try out having two 50d rounds of amoeba, and a further 2000 evaluations for the aux solver
+	// model->auxSolver_->maxEval_ = 200 * function->d_ + 2000;
+	// Now define the three initial design of experiments. small, half, all
+	// On the "small" case, want to generate a spread out sample
+	SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
+	vector<VectorXd> sampledPoints;
+	vector<VectorXd> sampledPointsLow;
+	vector<double> sampledPointsValues;
+	vector<double> sampledPointsValuesLow;
+
+	if(surrogateName.compare("kriging") == 0){
+		int initialSampleSize;
+		if(designOfExperimentsApproach.compare("small") == 0){
+			initialSampleSize =	function->d_ + 1;
+		}else if(designOfExperimentsApproach.compare("half") == 0){
+			initialSampleSize =	ceil(realBudget / 2.0);
+		}else if(designOfExperimentsApproach.compare("all") == 0){
+			initialSampleSize = realBudget;
+		}else{
+			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
+			exit(0);
+		}
+		sampledPoints = sampleGenerator->randomLHS(initialSampleSize);
+		model->scalePoints(sampledPoints);
+		sampleGenerator->morrisMitchellLocalOptimal(sampledPoints);
+		model->unscalePoints(sampledPoints);
+		sampledPointsValues = function->evaluateMany(sampledPoints);
+
+	}else if(surrogateName.compare("cokriging") == 0){
+		printf("CoKriging\n");
+		int initialSampleSizeLow;
+		int initialSampleSize;
+		int totalInitialBudget;
+		if(designOfExperimentsApproach.compare("small") == 0){
+			initialSampleSize =	function->d_ + 1;
+			initialSampleSizeLow = 2 * (function->d_ + 1);
+		}else if(designOfExperimentsApproach.compare("half") == 0){
+			printf("half\n");
+			totalInitialBudget = ceil(realBudget / 2.0);
+			initialSampleSize = ceil(totalInitialBudget / (1 + 2 * costRatio));
+			initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+		}else if(designOfExperimentsApproach.compare("all") == 0){
+			totalInitialBudget = realBudget;
+			initialSampleSize = ceil(totalInitialBudget / (1 + 2 * costRatio));
+			initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+		}else{
+			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
+			exit(0);
+		}
+		sampledPointsLow = sampleGenerator->randomLHS(initialSampleSizeLow);
+		model->scalePoints(sampledPointsLow);
+		sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
+		sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, initialSampleSize);
+		model->unscalePoints(sampledPointsLow);
+		model->unscalePoints(sampledPoints);
+		sampledPointsValues = function->evaluateMany(sampledPoints);
+		sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
+	}else{
+		printf("Undefined behaviour for surrogate model specified %s! Stopping now...\n", surrogateName.c_str());
+	}
+	delete sampleGenerator;
+
+	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
+
+
+	// Now need to get information to assess model performance
+	int testSampleSize = 1000 * function->d_;
+	vector<VectorXd> samples;
+	vector<double> trueVals;
+	if(functionName.compare(0, 5, "SOLAR") == 0){
+		// If we are here, read in the known values; taking a large sample will take forever
+		string fileLocation = "cpp_code/bifiEBBbenchmarks/data/misc/solarPointsLocations.txt";
+		samples = readPointsFromFile(fileLocation, 5000, 5);
+		fileLocation = "cpp_code/bifiEBBbenchmarks/data/misc/solarPointsValues.txt";
+		vector<VectorXd> trueVals2 = readPointsFromFile(fileLocation, 5000, 1);
+		for(int i = 0; i < (int)trueVals2.size(); i++){trueVals.push_back(trueVals2[i](0));}
+	}else{
+		// Read in large sample plan for reproducibility
+		string fileLocation = "data/samplePlans/LHS-dim" + to_string(function->d_) + "-n" + to_string(testSampleSize) + ".txt";
+		samples = readPointsFromFile(fileLocation, testSampleSize, function->d_);
+		unscalePoints(samples, function);
+		// If the points were not read in, generate them
+		if((int)samples.size() == 0){
+			if(printInfo){printf("Could not read in pre-generated large sample, generating it instead!\n");}
+			SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, false);
+			samples = sampleGenerator->randomLHS(testSampleSize);
+			delete sampleGenerator;
+		}
+		trueVals = function->evaluateMany(samples);
+	}
+	vector<double> oneWeights(testSampleSize, 1);
+	vector<double> modelVals;
+	// Should now be good to just iterate!
+	while(true){
+		model->trainModel();
+		modelVals = model->multipleSurfaceValues(samples);
+		double minVal = model->unscaleObservation(*min_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
+		double maxVal = model->unscaleObservation(*max_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));
+		double performanceError = relativeRootMeanSquaredError(trueVals, modelVals);
+		double performanceCorrelation = weightedCorrelationCoefficient(trueVals, modelVals, oneWeights, false);
+		double budgetUsed = model->sampledPoints_.size() + costRatio * model->sampledPointsLow_.size();
+		if(printInfo){printf("Used %.2f/%d of the budget with current model error %.4f and correlation %.4f\n", budgetUsed, realBudget, performanceError, performanceCorrelation);}
+		if(printInfo){printf("Elapsed time since start: %.2f seconds\n\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}
+		// Store info
+		ofstream outputFile;
+		outputFile.open(outputFilename, ios_base::app);
+		outputFile << problemType << 
+						" " << functionName <<
+						" " << to_string(realBudget) << 
+						" " << to_string(costRatio) << 
+						" " << to_string(seed) << 
+						" " << method <<
+						" " << to_string(budgetUsed) << 
+						" " << to_string(performanceError).substr(0,10) <<
+						" " << to_string(performanceCorrelation).substr(0,10) <<
+						" " << to_string(minVal).substr(0,10) << 
+						" " << to_string(maxVal).substr(0,10) <<
+						" " << (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000 << 
+						"\n";
+		outputFile.close();
+
+		if(abs(budgetUsed - realBudget) < TOL || budgetUsed > (realBudget)){break;}
+		// Get the next sample site and sample there
+		tuple<VectorXd, bool, bool> location = model->findNextSampleSite();
+		if(printInfo){
+			printf("Chosen point ");
+			printPoint(get<0>(location));
+			printf(" with acquisition value function of %.2f\n", model->evaluateAcquisitionFunction(get<0>(location)));
+		}
+
+		model->addSample(get<0>(location), get<1>(location), get<2>(location));
+
+	}
+	if(printInfo){printf("Completed run, elapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}
+}
 
 
 

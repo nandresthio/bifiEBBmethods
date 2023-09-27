@@ -67,7 +67,6 @@ class AmoebaSolver : public AuxSolver{
 	// Extra function so that the initial simplex and values are given, with heavy tune in mind
 	VectorXd optimise(vector<VectorXd> simplexPoints, vector<double> simplexValues);
 
-	int maxEval_;							// Number of evaluations the search is allowed.
 	int evalsUsed_;							// Total evaluations used so far.
 	
 };
@@ -94,7 +93,6 @@ class GASolver : public AuxSolver{
 	// Extra function so that the initial population and values are given, with heavy tune in mind
 	VectorXd optimise(vector<VectorXd> population, vector<double> populationVals);
 
-	int maxEval_;							// Number of evaluations the search is allowed
 	int populationSize_;					// Population at each iteration
 	
 };
@@ -125,8 +123,6 @@ class DynamicHillClimberSolver : public AuxSolver{
 	// For every dimension of the problem, two potential directions are defined with a magnitude of 
 	// half of the domain of that particular dimension.
 	vector<VectorXd> initialiseDirections();
-
-	int maxEval_;							// Number of evaluations the search is allowed
 	
 };
 
@@ -153,7 +149,6 @@ class HeavyTuneSolver : public AuxSolver{
 	// Main method which finds best possible point given budget; returns best point found.
 	virtual VectorXd optimise() override;
 
-	int maxEval_;							// Number of evaluations the search is allowed
 	int popSizeGA_;							// Population size of GA solver
 
 };
@@ -180,7 +175,6 @@ class RandomHeavyTuneSolver : public AuxSolver{
 	// Main method which finds best possible point given budget; returns best point found.
 	virtual VectorXd optimise() override;
 
-	int maxEval_;							// Number of evaluations the search is allowed
 	int numSphereARS_;						// Number of spheres when running ARS solver
 };
 
@@ -198,7 +192,6 @@ class RandomHeavyTuneSolver : public AuxSolver{
 // 	// Main method which finds best possible point given budget; returns best point found.
 // 	virtual VectorXd optimise() override;
 
-// 	int maxEval_;							// Max number of iterations
 	
 // };
 

@@ -32,98 +32,98 @@
 int main(int argc, char *argv[]){
 
 
-	BiFidelityFunction* function = processFunctionName("ToalBranin0.00");
-	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, 5, 10, 1, true);
-	vector<VectorXd> sampledPoints = points.first;
-	vector<VectorXd> sampledPointsLow = points.second;
-	vector<double> sampledPointsValues = function->evaluateMany(sampledPoints);
-	vector<double> sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
-	SurrogateModel* model = processModelName("cokriging", function, 1, true, true);
+	// BiFidelityFunction* function = processFunctionName("ToalBranin0.00");
+	// pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, 5, 10, 1, true);
+	// vector<VectorXd> sampledPoints = points.first;
+	// vector<VectorXd> sampledPointsLow = points.second;
+	// vector<double> sampledPointsValues = function->evaluateMany(sampledPoints);
+	// vector<double> sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
+	// SurrogateModel* model = processModelName("cokriging", function, 1, true, true);
 
-	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
-	model->trainModel();
-	VectorXd point;
+	// model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
+	// model->trainModel();
+	// VectorXd point;
 
-	// model->setAquisitionFunction("surface");
-	// point = model->findNextSampleSite();
+	// // model->setAquisitionFunction("surface");
+	// // point = model->findNextSampleSite();
+	// // model->setAquisitionFunction("globalVariance");
+	// // point = model->findNextSampleSite();
+	// // model->setAquisitionFunction("surface");
+	// // point = model->findNextSampleSite();
+
+	// printf("\nDone testing\n");
+
+
+	// printf("Points\n");
+	// for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+	// 	printPoint(model->sampledPoints_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValues_[i]);
+	// }
+	// printf("Points low\n");
+	// for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+	// 	printPoint(model->sampledPointsLow_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	// }
+
+	// printf("\nGlobal variance based sample\n");
 	// model->setAquisitionFunction("globalVariance");
 	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// printf("Points\n");
+	// for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+	// 	printPoint(model->sampledPoints_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValues_[i]);
+	// }
+	// printf("Points low\n");
+	// for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+	// 	printPoint(model->sampledPointsLow_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	// }
+	// model->trainModel();
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// printf("Points\n");
+	// for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
+	// 	printPoint(model->sampledPoints_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValues_[i]);
+	// }
+	// printf("Points low\n");
+	// for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
+	// 	printPoint(model->sampledPointsLow_[i]);
+	// 	printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
+	// }
+	// printf("\nDone with global variance based\n");
+
+	// printf("\nSurface based sample\n");
 	// model->setAquisitionFunction("surface");
 	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// printf("\nDone with surface based\n");
 
-	printf("\nDone testing\n");
+	// printf("\nVariance based sample\n");
+	// model->setAquisitionFunction("variance");
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// printf("\nDone with variance based\n");
 
-
-	printf("Points\n");
-	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
-		printPoint(model->sampledPoints_[i]);
-		printf(" %.2f\n", model->sampledPointsValues_[i]);
-	}
-	printf("Points low\n");
-	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
-		printPoint(model->sampledPointsLow_[i]);
-		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
-	}
-
-	printf("\nGlobal variance based sample\n");
-	model->setAquisitionFunction("globalVariance");
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	printf("Points\n");
-	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
-		printPoint(model->sampledPoints_[i]);
-		printf(" %.2f\n", model->sampledPointsValues_[i]);
-	}
-	printf("Points low\n");
-	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
-		printPoint(model->sampledPointsLow_[i]);
-		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
-	}
-	model->trainModel();
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	printf("Points\n");
-	for(int i = 0; i < (int)model->sampledPoints_.size(); i++){
-		printPoint(model->sampledPoints_[i]);
-		printf(" %.2f\n", model->sampledPointsValues_[i]);
-	}
-	printf("Points low\n");
-	for(int i = 0; i < (int)model->sampledPointsLow_.size(); i++){
-		printPoint(model->sampledPointsLow_[i]);
-		printf(" %.2f\n", model->sampledPointsValuesLow_[i]);
-	}
-	printf("\nDone with global variance based\n");
-
-	printf("\nSurface based sample\n");
-	model->setAquisitionFunction("surface");
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	printf("\nDone with surface based\n");
-
-	printf("\nVariance based sample\n");
-	model->setAquisitionFunction("variance");
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	printf("\nDone with variance based\n");
-
-	printf("\nExpectedImprovementbased based sample\n");
-	model->setAquisitionFunction("expectedImprovement");
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	point = model->findNextSampleSite();
-	model->addSample(point, true, true);
-	model->trainModel();
-	printf("\nDone with Expected improvement based\n\n\n");
+	// printf("\nExpectedImprovementbased based sample\n");
+	// model->setAquisitionFunction("expectedImprovement");
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// point = model->findNextSampleSite();
+	// model->addSample(point, true, true);
+	// model->trainModel();
+	// printf("\nDone with Expected improvement based\n\n\n");
 
 	if(argc == 1){
 		// If no inputs are given, show some examples on how to run this code
@@ -234,7 +234,7 @@ int main(int argc, char *argv[]){
 				}else if(problemType.compare("surrogateModelWithFixedSample") == 0){
 					header = "problemType functionName nh nl seed method modelError modelCorrelation minVal maxVal time\n";
 				}else if(problemType.compare("surrogateModelWithBudget") == 0){
-					header = "problemType functionName budget costRatio seed method modelError modelCorrelation minVal maxVal time\n";
+					header = "problemType functionName budget costRatio seed method usedBudget modelError modelCorrelation minVal maxVal time\n";
 				}else if(problemType.compare("optimisationWithBudget") == 0){
 					header = "problemType functionName budget costRatio seed method modelError modelCorrelation minVal maxVal time\n";
 				}else{

@@ -196,7 +196,7 @@ double SurrogateModel::evaluateAcquisitionFunction(VectorXd x){
 	}
 }
 
-void SurrogateModel::setAquisitionFunction(string chosenAcquisiton){
+void SurrogateModel::setAcquisitionFunction(string chosenAcquisiton){
 	if(chosenAcquisiton.compare("surface") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = true;
@@ -206,14 +206,17 @@ void SurrogateModel::setAquisitionFunction(string chosenAcquisiton){
 	}
 }
 
-VectorXd SurrogateModel::findNextSampleSite(){
+tuple<VectorXd, bool, bool> SurrogateModel::findNextSampleSite(){
 	// Ok, so idea is simply to initialise solver and run it!
 	AcquisitionFunction* function = new AcquisitionFunction(this);
 	auxSolver_->updateProblem(function, acquisitionIsMin_);
 	VectorXd nextSampleSite = auxSolver_->optimise();
 	delete function;
-	return nextSampleSite;
+	// Return false false indicating neither source should be sampled. Passing this on to add sample should
+	// cause an error; these bools should be overriden by latter calls. 
+	return make_tuple(nextSampleSite, false, false);
 }
+
 
 SurrogateModel::AcquisitionFunction::AcquisitionFunction(SurrogateModel* surrogateModel):
 	Function(surrogateModel->biFunction_->d_, surrogateModel->biFunction_->lowerBound_, surrogateModel->biFunction_->upperBound_),
@@ -287,6 +290,7 @@ void Kriging::saveMuSigma(){
 	rMatrix_ = get<2>(data);
 	rMatrixDecomposition_ = get<3>(data);
 	modelWeights_ = get<4>(data);
+	rMatrixInverse_ = rMatrix_.inverse();
 
 	return;
 }
@@ -384,7 +388,77 @@ double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscal
 	}
 	double improvement = sqrt(var)*(value * normalCDF(value) + normalPDF(value));
 	return improvement;
+}
 
+double Kriging::globalVarianceReduction(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+
+	// printf("Reduction for point ");
+	// printPoint(xCopy);
+	// printf("with sigma %.2f and norms ", sigma_);
+	// for(int i = 0; i < (int)sampledPoints_.size(); i++){
+	// 	printf("%.5f ", (xCopy - sampledPoints_[i]).norm());
+	// }
+	// printf("\n");
+	// printf("And existing points\n");
+	// for(int i = 0; i < (int)sampledPoints_.size(); i++){
+	// 	printPoint(sampledPoints_[i]);
+	// }
+	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
+	// First calculate the determinant
+	double denumerator;
+	int n = (int)sampledPoints_.size();
+	int d = (int)sampledPoints_[0].size();
+	// First want r vector
+	VectorXd r(n);
+	auto it = sampledPoints_.begin();
+	for(int i = 0; i < n; i++, it++){
+		double sum = 0;
+		for(int k = 0; k < d; k++){
+			sum += theta_[k] * pow(abs((*it)(k) - xCopy(k)), pVector_[k]);
+		}
+		r(i) = exp(-sum);
+	}
+	// auto weights = rMatrixDecomposition_.solve(r);
+	auto weights = rMatrixInverse_ * r;
+	// This will cause problems if the point is very close to an already sampled point. If so, do not use it
+	denumerator = 1 - r.transpose() * weights;
+	// if(denumerator < TOL){return 0;}
+	// Now for each trial point calculate the nominator
+	double sumNumerator = 0;
+	for(int j = 0;  j < (int)varianceTestPoints_.size(); j++){
+		// printf("For point ");
+		// printPoint(varianceTestPoints_[j]);
+		VectorXd rOld(n);
+		auto it = sampledPoints_.begin();
+		for(int i = 0; i < n; i++, it++){
+			double sum = 0;
+			for(int k = 0; k < d; k++){
+				sum += theta_[k] * pow(abs((*it)(k) - (varianceTestPoints_[j])(k)), pVector_[k]);
+			}
+			rOld(i) = exp(-sum);
+		}
+		// printf(" have correlations ");
+		// printPoint(rOld);
+		double sum = 0;
+		for(int k = 0; k < d; k++){
+			sum += theta_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j])(k)), pVector_[k]);
+		}
+
+		double sumPointComp = exp(-sum);
+		// printf(" and an addition %.5f ", sumPointComp);
+		double result = sigma_ * (rOld.transpose() * weights - sumPointComp) * (rOld.transpose() * weights - sumPointComp);
+		// It should not matter a whole lot but if want to unscale the output, need to multiply 
+		if(unscaleOutput){
+			result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+		}
+		sumNumerator = sumNumerator + result;
+		
+		// printf("with change in variance is %.20f from original variance of %.20f with nrom %.20f\n", result / denumerator, uncertainty(varianceTestPoints_[j]), (xCopy - varianceTestPoints_[j]).norm());
+	}
+	// printf("Numerator of %.20f, denumerator of %.20f, value of %.20f\n", sumNumerator, denumerator, (sumNumerator / denumerator) / (int)varianceTestPoints_.size());
+	return (sumNumerator / denumerator) / (int)varianceTestPoints_.size();
 }
 
 
@@ -406,7 +480,7 @@ tuple<double, double> Kriging::meanVarianceCalculator(VectorXd &x){
 	VectorXd rightHandSide = r.transpose() * modelWeights_;
 	double s_x = mu_ + rightHandSide(0);
 	if(n == 1){s_x = mu_;}
-	MatrixXd var_mid = r.transpose() * rMatrixDecomposition_.solve(r);
+	MatrixXd var_mid = r.transpose() * rMatrixInverse_ * r;
 	double variance = sigma_ * (1 - var_mid(0,0));
 	
 	return make_tuple(s_x, variance);
@@ -416,22 +490,26 @@ double Kriging::evaluateAcquisitionFunction(VectorXd x){
 	if(chosenAcquisiton_.compare("variance") == 0){
 		return uncertainty(x);
 	}else if(chosenAcquisiton_.compare("globalVariance") == 0){
-		// If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
-		// Get predicted surface value
-		double predictedValue = scaleObservation(surfaceValue(x));
-		scalePoint(x);
-		sampledPoints_.push_back(x);
-		sampledPointsValues_.push_back(predictedValue);
-		saveMuSigma();
-		double integralVariance = 0;
-		for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
-			integralVariance += uncertainty(varianceTestPoints_[i]);
-		}
-		// Now need to remove the points and save parameters again
-		sampledPoints_.pop_back();
-		sampledPointsValues_.pop_back();
-		saveMuSigma();
-		return integralVariance / (int)varianceTestPoints_.size();
+		return globalVarianceReduction(x);
+
+
+		// // If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
+		// // Get predicted surface value
+		// double predictedValue = scaleObservation(surfaceValue(x));
+		// scalePoint(x);
+		// sampledPoints_.push_back(x);
+		// sampledPointsValues_.push_back(predictedValue);
+		// saveMuSigma();
+		// double integralVariance = 0;
+		// for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
+		// 	integralVariance += uncertainty(varianceTestPoints_[i]);
+		// }
+		// // Now need to remove the points and save parameters again
+		// sampledPoints_.pop_back();
+		// sampledPointsValues_.pop_back();
+		// saveMuSigma();
+		// // printf("Value of %.20f\n", integralVariance / (int)varianceTestPoints_.size());
+		// return integralVariance / (int)varianceTestPoints_.size();
 	}else if(chosenAcquisiton_.compare("expectedImprovement") == 0){
 		return expectedImprovement(x);
 	}else{
@@ -439,29 +517,30 @@ double Kriging::evaluateAcquisitionFunction(VectorXd x){
 	}
 }
 
-void Kriging::setAquisitionFunction(string chosenAcquisiton){
+void Kriging::setAcquisitionFunction(string chosenAcquisiton){
 	if(chosenAcquisiton.compare("variance") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = false;
 	}else if(chosenAcquisiton.compare("globalVariance") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
-		acquisitionIsMin_ = true;
-		// Need to define a set of reference points to assess global variance
-		varianceTestPoints_ = sampleGenerator_->randomLHS(100 * biFunction_->d_);
+		acquisitionIsMin_ = false;
 	}else if(chosenAcquisiton.compare("expectedImprovement") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = false;
 	}else{
-		SurrogateModel::setAquisitionFunction(chosenAcquisiton);
+		SurrogateModel::setAcquisitionFunction(chosenAcquisiton);
 	}
 }
 
-VectorXd Kriging::findNextSampleSite(){
+tuple<VectorXd, bool, bool> Kriging::findNextSampleSite(){
 	// If dealing with globalVariance, choose a random set of points for monte-carlo integration
 	if(chosenAcquisiton_.compare("globalVariance") == 0){
-		varianceTestPoints_ = sampleGenerator_->randomLHS(100 * biFunction_->d_);
+		varianceTestPoints_ = sampleGenerator_->randomLHS(100);
+		scalePoints(varianceTestPoints_);
 	}
-	return SurrogateModel::findNextSampleSite();
+	tuple<VectorXd, bool, bool> result = SurrogateModel::findNextSampleSite();
+	// Return the same, but specify that should only sample the high-fidelity source
+	return make_tuple(get<0>(result), true, false);
 }
 
 
@@ -582,7 +661,6 @@ CoKriging::~CoKriging(){}
 
 
 void CoKriging::saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow){
-	printf("Got here!\n");
 	// First to the usual saving of the data
 	SurrogateModel::saveSample(points, pointsLow, observations, observationsLow);
 	// And now save the relevant things to lowFiKriging
@@ -654,6 +732,7 @@ void CoKriging::saveMuSigma(){
 	muCombined_ = get<0>(data1);
 	cMatrix_ = get<1>(data1);
 	cMatrixDecomposition_ = get<2>(data1);
+	cMatrixInverse_ = cMatrix_.inverse();
 	return;
 }
 
@@ -825,9 +904,12 @@ tuple<double, double> CoKriging::meanVarianceCalculator(VectorXd &x){
 
 	
 	// New way
-	VectorXd rightHandSide = c.transpose() * cMatrixDecomposition_.solve(y - one * muCombined_);
+	// VectorXd rightHandSide = c.transpose() * cMatrixDecomposition_.solve(y - one * muCombined_);
+	VectorXd rightHandSide = c.transpose() * cMatrixInverse_ * (y - one * muCombined_);
+	
 	double s_x = muCombined_ + rightHandSide(0);
-	rightHandSide = c.transpose() * cMatrixDecomposition_.solve(c);
+	// rightHandSide = c.transpose() * cMatrixDecomposition_.solve(c);
+	rightHandSide = c.transpose() * cMatrixInverse_ * c;
 	double variance = rho_ * rho_ * sigmaL_ + sigmaB_ - rightHandSide(0);
 	
 	return make_tuple(s_x, variance);
@@ -872,6 +954,13 @@ double CoKriging::evaluateAcquisitionFunction(VectorXd x){
 	}else{
 		return Kriging::evaluateAcquisitionFunction(x);
 	}
+}
+
+
+tuple<VectorXd, bool, bool> CoKriging::findNextSampleSite(){
+	tuple<VectorXd, bool, bool> result = Kriging::findNextSampleSite();
+	// Return the same, but specify that should only sample both sources
+	return make_tuple(get<0>(result), true, true);
 }
 
 
