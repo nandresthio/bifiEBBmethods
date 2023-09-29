@@ -230,10 +230,17 @@ features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = "
 order <- match(functions, features$instances)
 dims <- features[order, 'feature_dimension']
 functions <- functions[order(match(dims, 1:20))]
+dims <- dims[order(match(dims, 1:20))]
 index <- 0
 for(i in 1:length(functions)){
   func <- functions[[i]]
+  dim <- dims[[i]]
   print(func)
+  print(dim)
+  seedsPerRun <- 40
+  if(dim > 3){seedsPerRun <- 10}
+  if(dim >= 10){seedsPerRun <- 1}
+  
   for(model in c("kriging")){
     for(acquisition in c("variance", "globalVariance")){
       for(doe in c("small", "half", "all")){
@@ -243,7 +250,7 @@ for(i in 1:length(functions)){
           if(doe == "all" & acquisition != "globalVariance"){next}
           for(costRatio in c(0)){
             index <- index + 1
-            runData <- createSingleSeedScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = 40)
+            runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = 40, seedsPerRun = seedsPerRun)
             if(index != 1){
               existingRunData <- rbind(existingRunData, runData)
             }else{

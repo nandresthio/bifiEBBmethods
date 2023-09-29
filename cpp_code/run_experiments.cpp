@@ -83,8 +83,18 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 		getline(ss2, token2, ',');
 		double costRatio = stof(token2);
 		getline(ss2, token2, ',');
-		int seed = stoi(token2);
-		assessSurrogateModelWithBudget(outputFilename, problemType, functionName, budget, costRatio, seed, method);
+		stringstream ss3(token2);
+		string token3;
+		// Get the seeds
+		getline(ss3, token3, '-');
+		int seedStart = stoi(token3);
+		getline(ss3, token, '-');
+		int seedEnd = stoi(token);
+		for(int seed = seedStart; seed <= seedEnd; seed++){
+			if(printInfo){printf("Running seed %d\n", seed);}
+			assessSurrogateModelWithBudget(outputFilename, problemType, functionName, budget, costRatio, seed, method);
+			if(printInfo){printf("Done with seed %d\n\n", seed);}
+		}
 	}else{
 		printf("Problem, do not recognise problem type in run file! Must be one of sampleCreation, surrogateModelWithFixedSample, surrogateModelWithBudget or optimisationWithBudget. Stopping now...\n");
 		exit(0);
@@ -434,8 +444,6 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	// Initialise model and design of experiments
 	SurrogateModel* model = processModelName(surrogateName, function, seed, true, false);
 	model->setAcquisitionFunction(acquisitionFunction);
-
-	printf("Here good!\n");
 
 	// Try out having two 50d rounds of amoeba, and a further 2000 evaluations for the aux solver
 	// model->auxSolver_->maxEval_ = 200 * function->d_ + 2000;
