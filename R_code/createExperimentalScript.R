@@ -241,12 +241,14 @@ for(i in 1:length(functions)){
   if(dim > 3){seedsPerRun <- 10}
   if(dim >= 10){seedsPerRun <- 1}
   
+  if(dim > 5 & dim <= 10){next}
+  
   for(model in c("kriging")){
-    for(acquisition in c("variance", "globalVariance")){
+    for(acquisition in c("globalVariance")){
       for(doe in c("small", "half", "all")){
         method <- paste0(model, "_", acquisition, "_", doe)
         for(budget in c(5, 10, 15, 20)){
-          if(doe == "small" & budget != 20){next}
+          # if(doe == "small" & budget != 20){next}
           if(doe == "all" & acquisition != "globalVariance"){next}
           for(costRatio in c(0)){
             index <- index + 1
@@ -262,7 +264,7 @@ for(i in 1:length(functions)){
     }
   }
 }
-write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKriging.txt", quote = FALSE, row.names = FALSE)
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKrigingTest.txt", quote = FALSE, row.names = FALSE)
 
 
 

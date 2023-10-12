@@ -165,7 +165,7 @@ void SurrogateModel::addSample(VectorXd point, bool sampleHigh, bool sampleLow){
 
 
 
-void SurrogateModel::trainModel(){
+void SurrogateModel::trainModel(bool optimiseHyperparameters){
 	printf("Should not get to this train model call! Exiting now...\n");
 	exit(0);
 }
@@ -246,9 +246,15 @@ Kriging::Kriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int rando
 Kriging::~Kriging(){}
 
 
-void Kriging::trainModel(){
-	if(printInfo_){printf("Training kriging model.\n");}
-	trainHyperparameters();
+void Kriging::trainModel(bool optimiseHyperparameters){
+	if(printInfo_){printf("Training kriging model - ");}
+	if(optimiseHyperparameters){
+		if(printInfo_){printf("optimising hyperparameters.\n");}
+		trainHyperparameters();
+	}else{
+		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
+	}
+	
 	saveMuSigma();	
 	trainedModel_ = true;
 	return;
@@ -272,14 +278,24 @@ void Kriging::trainHyperparameters(){
 		upperBound[d+i] = 2.0;
 	}
 	maxLogLikelihood_ = -DBL_MAX;
-	ConcentratedLikelihoodFunction* function = new ConcentratedLikelihoodFunction(2*d, lowerBound, upperBound, this);
+	ConcentratedLikelihoodFunction* function;
+	if(fixedP_){
+		// If using fixed p hyperparameters, only need to optimise the thetas
+		function = new ConcentratedLikelihoodFunction(d, lowerBound, upperBound, this);
+	}else{
+		function = new ConcentratedLikelihoodFunction(2*d, lowerBound, upperBound, this);
+	}
 	auxSolver_->updateProblem(function, false);
 	VectorXd hyperparameters = auxSolver_->optimise();
 	delete function;
 	// Extract two vectors, and store!
 	for(int i = 0; i < d; i++){
 		theta_[i] = pow(10,hyperparameters(i));
-		pVector_[i] = hyperparameters(d + i);
+		if(fixedP_){
+			pVector_[i] = 2;
+		}else{
+			pVector_[i] = hyperparameters(d + i);
+		}
 	}
 }
 
@@ -390,23 +406,53 @@ double Kriging::expectedImprovement(VectorXd &x, bool pointIsScaled, bool unscal
 	return improvement;
 }
 
+double Kriging::kernelProductIntegral(double x1, double x2, double theta1, double theta2){
+	return ( 1 / ( 2 * sqrt(theta1 + theta2) ) ) * sqrt(M_PI) * exp( -1 * ( (x1 - x2) * (x1 - x2) * theta1 * theta2 ) / ( theta1 + theta2 ) ) * ( erf( ( theta1 - x1 * theta1 + theta2 - x2 * theta2 ) / ( sqrt(theta1 + theta2) ) ) + erf( ( x1 * theta1 + x2 * theta2 ) / sqrt(theta1 + theta2) ) );
+}
+
 double Kriging::globalVarianceReduction(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	// Doing the approach detailed in "Replication or Exploration? Sequential Design for Stochastic Simulation Experiments"
+	// Gives an O(n^2) value of reduction in global variance but is restricted to having the p hyperparameters equal to 2.
 	VectorXd xCopy = x;
 	if(!pointIsScaled){scalePoint(xCopy);}
+	double value;
+	int n = (int)sampledPoints_.size();
+	int d = (int)sampledPoints_[0].size();
+	// First want r vector
+	VectorXd r(n);
+	VectorXd w(n);
+	auto it = sampledPoints_.begin();
+	for(int i = 0; i < n; i++, it++){
+		double sum = 0;
+		double product = 1;
+		for(int k = 0; k < d; k++){
+			sum += theta_[k] * pow(abs((*it)(k) - xCopy(k)), pVector_[k]);
+			product = product * kernelProductIntegral((*it)(k), xCopy(k), theta_[k], theta_[k]);
+		}
+		r(i) = exp(-sum);
+		w(i) = product;
+	}
+	double wSelfProduct = 1;
+	for(int k = 0; k < d; k++){
+		wSelfProduct = wSelfProduct * kernelProductIntegral(xCopy(k), xCopy(k), theta_[k], theta_[k]); 
+	}
+	// This calculation is done in O(n^2)
+	auto weights = rMatrixInverse_ * r;
+	double val1 = (weights.transpose()  * wMatrix_ * weights);
+	double val2 = 2 * (w.transpose() * weights)(0);
+	
+	value = sigma_ * (val1 - val2 + wSelfProduct) / (1 - r.transpose() * weights);
+	if(unscaleOutput){
+		value = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * value;
+	}
+	return value;
+}
 
-	// printf("Reduction for point ");
-	// printPoint(xCopy);
-	// printf("with sigma %.2f and norms ", sigma_);
-	// for(int i = 0; i < (int)sampledPoints_.size(); i++){
-	// 	printf("%.5f ", (xCopy - sampledPoints_[i]).norm());
-	// }
-	// printf("\n");
-	// printf("And existing points\n");
-	// for(int i = 0; i < (int)sampledPoints_.size(); i++){
-	// 	printPoint(sampledPoints_[i]);
-	// }
+double Kriging::globalVarianceReductionApproximation(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
 	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
 	// First calculate the determinant
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
 	double denumerator;
 	int n = (int)sampledPoints_.size();
 	int d = (int)sampledPoints_[0].size();
@@ -489,27 +535,10 @@ tuple<double, double> Kriging::meanVarianceCalculator(VectorXd &x){
 double Kriging::evaluateAcquisitionFunction(VectorXd x){
 	if(chosenAcquisiton_.compare("variance") == 0){
 		return uncertainty(x);
+	}else if(chosenAcquisiton_.compare("globalVarianceApproximation") == 0){
+		return globalVarianceReductionApproximation(x);
 	}else if(chosenAcquisiton_.compare("globalVariance") == 0){
 		return globalVarianceReduction(x);
-
-
-		// // If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
-		// // Get predicted surface value
-		// double predictedValue = scaleObservation(surfaceValue(x));
-		// scalePoint(x);
-		// sampledPoints_.push_back(x);
-		// sampledPointsValues_.push_back(predictedValue);
-		// saveMuSigma();
-		// double integralVariance = 0;
-		// for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
-		// 	integralVariance += uncertainty(varianceTestPoints_[i]);
-		// }
-		// // Now need to remove the points and save parameters again
-		// sampledPoints_.pop_back();
-		// sampledPointsValues_.pop_back();
-		// saveMuSigma();
-		// // printf("Value of %.20f\n", integralVariance / (int)varianceTestPoints_.size());
-		// return integralVariance / (int)varianceTestPoints_.size();
 	}else if(chosenAcquisiton_.compare("expectedImprovement") == 0){
 		return expectedImprovement(x);
 	}else{
@@ -518,25 +547,56 @@ double Kriging::evaluateAcquisitionFunction(VectorXd x){
 }
 
 void Kriging::setAcquisitionFunction(string chosenAcquisiton){
+	// Adding this bool here in case the same model is assigned different acquisition functions
+	// at different stages. Essentially it looks like if sampling is based on global variance,
+	// need to restrict the p hyperparameters to be 2.
 	if(chosenAcquisiton.compare("variance") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = false;
+		fixedP_ = false;
 	}else if(chosenAcquisiton.compare("globalVariance") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = false;
+		fixedP_ = true;
+	}else if(chosenAcquisiton.compare("globalVarianceApproximation") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = false;
+		fixedP_ = false;	
 	}else if(chosenAcquisiton.compare("expectedImprovement") == 0){
 		chosenAcquisiton_ = chosenAcquisiton;
 		acquisitionIsMin_ = false;
+		fixedP_ = false;
 	}else{
+		fixedP_ = false;
 		SurrogateModel::setAcquisitionFunction(chosenAcquisiton);
 	}
 }
 
 tuple<VectorXd, bool, bool> Kriging::findNextSampleSite(){
-	// If dealing with globalVariance, choose a random set of points for monte-carlo integration
-	if(chosenAcquisiton_.compare("globalVariance") == 0){
+	// If dealing with globalVarianceApproximation, choose a random set of points for monte-carlo integration
+	if(chosenAcquisiton_.compare("globalVarianceApproximation") == 0){
 		varianceTestPoints_ = sampleGenerator_->randomLHS(100);
 		scalePoints(varianceTestPoints_);
+	}
+	// If dealing with globalVariance precalculate W matrix for speed
+	if(chosenAcquisiton_.compare("globalVariance") == 0){
+		int n = (int)sampledPoints_.size();
+		int d = (int)sampledPoints_[0].size();
+		MatrixXd wMatrix(n,n);
+		// Define matrix
+		auto it1 = sampledPoints_.begin();
+		for(int i = 0; i < n; i++, it1++){
+			auto it2 = it1;
+			for(int j = i; j < n; j++, it2++){
+				double product = 1;
+				for(int k = 0; k < d; k++){
+					product = product * 0.25 * sqrt(2 * M_PI * (1.0/theta_[k])) * exp(-1 * pow((*it1)(k) - (*it2)(k), 2) / (2 * (1.0/theta_[k]))) * (erf( (2 - ((*it1)(k) + (*it2)(k)) )/sqrt(2 * (1.0/theta_[k])) ) + erf( ((*it1)(k) + (*it2)(k))/sqrt(2 * (1.0/theta_[k])) ) ); 
+				}
+				wMatrix(i,j) = product;
+				wMatrix(j,i) = product;
+			}
+		}
+		wMatrix_ = wMatrix;
 	}
 	tuple<VectorXd, bool, bool> result = SurrogateModel::findNextSampleSite();
 	// Return the same, but specify that should only sample the high-fidelity source
@@ -578,7 +638,11 @@ double Kriging::ConcentratedLikelihoodFunction::evaluate(VectorXd &point){
 	for(int i = 0; i < d; i++){
 		theta[i] = pow(10,point(i));
 		// theta[i] = point(i);
-		pVector[i] = point(d + i);
+		if(krigingModel_->fixedP_){
+			pVector[i] = 2;
+		}else{
+			pVector[i] = point(d + i);
+		}
 	}
 	krigingModel_->theta_ = theta;
 	krigingModel_->pVector_ = pVector;
@@ -671,11 +735,16 @@ void CoKriging::saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow
 	
 }
 
-void CoKriging::trainModel(){
+void CoKriging::trainModel(bool optimiseHyperparameters){
 	if(printInfo_){printf("Training cokriging model, start with low fi kriging.\n");}
-	lowFiKriging_->trainModel();
-	if(printInfo_){printf("Training cokriging model, train intermediate model.\n");}
-	trainHyperparameters();
+	lowFiKriging_->trainModel(optimiseHyperparameters);
+	if(printInfo_){printf("Training cokriging model, train intermediate model - ");}
+	if(optimiseHyperparameters){
+		if(printInfo_){printf("optimising hyperparameters.\n");}
+		trainHyperparameters();
+	}else{
+		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
+	}
 	saveMuSigma();	
 	return;
 }

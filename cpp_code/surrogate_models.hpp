@@ -104,7 +104,7 @@ public:
 
 	// Parent function to train model. For this class this is empty and should not be called; each of the derived classes
 	// implement this based on how each of the models is trained.
-	virtual void trainModel();
+	virtual void trainModel(bool optimiseHyperparameters = true);
 
 	// Returns the surrogate surface value prediction at a point. It is assumed the point is unscaled i.e. it lies in the domain
 	// of the specified biFunction, and that the desired output should not be scaled i.e. it should lie near the range of the biFunction.
@@ -182,7 +182,7 @@ class Kriging : public SurrogateModel{
 
 	// Main method which trains the Kriging model. Undergoes an auxiliary optimisation to find the best hyperparameters,
 	// then stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel() override;
+	virtual void trainModel(bool optimiseHyperparameters = true) override;
 
 	// Method which uses ARS to find the best hyperparameter values by maximising the concentrated likelihood function.
 	virtual void trainHyperparameters();
@@ -203,7 +203,11 @@ class Kriging : public SurrogateModel{
 	// Returns the expected improvement at a point; assumption is we are minimising
 	double expectedImprovement(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
+	double kernelProductIntegral(double x1, double x2, double theta1, double theta2);
+
 	double globalVarianceReduction(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionApproximation(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x);
@@ -254,6 +258,9 @@ class Kriging : public SurrogateModel{
 	double maxLogLikelihood_;				// Maximum loglikelihood observed so far, stored for tie breaker purposes for certain training approaches.
 
 	vector<VectorXd> varianceTestPoints_;	// Locations used to estimate the integral of the variance, used for acquisition function based on overall variance reduction
+
+	bool fixedP_;							// Bool which indicates whether the hyperparameters p_i are all fixed to 2.
+	MatrixXd wMatrix_;						// Matrix for variance integration
 };
 
 
@@ -283,7 +290,7 @@ class CoKriging: public Kriging{
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
 	// Finally it stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel() override;
+	virtual void trainModel(bool optimiseHyperparameters = true) override;
 
 	// Method which finds the optimal hyperparameters for the difference model (i.e. theta_b's and p_b's) as well as rho
 	// using the ARS by maximising the intermediate concentrated likelihood function.

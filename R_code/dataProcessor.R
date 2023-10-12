@@ -24,7 +24,6 @@
 
 library(plyr)
 library(stringr)
-
 # Functions which take the experimental results and process them so that they can be plotted
 # and analysed
 
@@ -170,6 +169,8 @@ condenseData <- function(data, algorithms){
   }
   return(output)
 }
+
+
 
 
 
