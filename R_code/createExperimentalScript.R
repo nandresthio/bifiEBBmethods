@@ -238,13 +238,10 @@ for(i in 1:length(functions)){
   print(func)
   print(dim)
   seedsPerRun <- 40
-  if(dim > 3){seedsPerRun <- 10}
-  if(dim >= 10){seedsPerRun <- 1}
-  
-  if(dim > 5 & dim <= 10){next}
-  
+  if(dim > 5){seedsPerRun <- 5}
+  if(dim > 10){seedsPerRun <- 1}
   for(model in c("kriging")){
-    for(acquisition in c("globalVariance")){
+    for(acquisition in c("variance", "globalVariance")){
       for(doe in c("small", "half", "all")){
         method <- paste0(model, "_", acquisition, "_", doe)
         for(budget in c(5, 10, 15, 20)){
