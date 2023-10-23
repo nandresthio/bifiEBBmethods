@@ -455,8 +455,9 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	vector<double> sampledPointsValues;
 	vector<double> sampledPointsValuesLow;
 
+	int initialSampleSize;
+	int initialSampleSizeLow;
 	if(surrogateName.compare("kriging") == 0){
-		int initialSampleSize;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
 		}else if(designOfExperimentsApproach.compare("half") == 0){
@@ -467,16 +468,26 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
 			exit(0);
 		}
-		sampledPoints = sampleGenerator->randomLHS(initialSampleSize);
+
+		initialSampleSizeLow = 0;
+		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
+		sampledPoints = points.first;
+		// If was generated, I actually am not happy with this (not locally optimal), so optimise myself
+		// If read in, this should be a fast call which finds no further optimisation
 		model->scalePoints(sampledPoints);
 		sampleGenerator->morrisMitchellLocalOptimal(sampledPoints);
 		model->unscalePoints(sampledPoints);
 		sampledPointsValues = function->evaluateMany(sampledPoints);
 
+		// Old aproach, sample and optmise here
+		// sampledPoints = sampleGenerator->randomLHS(initialSampleSize);
+		// model->scalePoints(sampledPoints);
+		// sampleGenerator->morrisMitchellLocalOptimal(sampledPoints);
+		// model->unscalePoints(sampledPoints);
+		// sampledPointsValues = function->evaluateMany(sampledPoints);
+
 	}else if(surrogateName.compare("cokriging") == 0){
 		printf("CoKriging\n");
-		int initialSampleSizeLow;
-		int initialSampleSize;
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
@@ -494,14 +505,26 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
 			exit(0);
 		}
-		sampledPointsLow = sampleGenerator->randomLHS(initialSampleSizeLow);
-		model->scalePoints(sampledPointsLow);
+
+		// New way, ignore provided subset in case it is of a non optimise low-fidelity sample
+		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
+		sampledPointsLow = points.second;
 		sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
 		sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, initialSampleSize);
 		model->unscalePoints(sampledPointsLow);
 		model->unscalePoints(sampledPoints);
 		sampledPointsValues = function->evaluateMany(sampledPoints);
 		sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
+
+		// // Old way
+		// sampledPointsLow = sampleGenerator->randomLHS(initialSampleSizeLow);
+		// model->scalePoints(sampledPointsLow);
+		// sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
+		// sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, initialSampleSize);
+		// model->unscalePoints(sampledPointsLow);
+		// model->unscalePoints(sampledPoints);
+		// sampledPointsValues = function->evaluateMany(sampledPoints);
+		// sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
 	}else{
 		printf("Undefined behaviour for surrogate model specified %s! Stopping now...\n", surrogateName.c_str());
 	}
