@@ -228,7 +228,8 @@ for(i in 1:length(functions)){
         method <- paste0(model, "_", acquisition, "_", doe)
         for(budget in c(5, 10, 15, 20)){
           # if(doe == "all" & acquisition != "globalVariance"){next}
-          for(costRatio in c(0.5, 0.1, 0.025, 0.01, 0.001)){
+          for(costRatio in c(0.5, 0.1, 0.025, 0.01)){
+            if(model == "kriging" & costRatio != 0.5){next}
             index <- index + 1
             runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
             if(index != 1){

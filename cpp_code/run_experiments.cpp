@@ -488,7 +488,8 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			initialSampleSizeLow = 2 * (function->d_ + 1);
 		}else if(designOfExperimentsApproach.compare("half") == 0){
 			totalInitialBudget = ceil(realBudget / 2.0);
-			initialSampleSize = round(totalInitialBudget / (1 + 2 * costRatio));
+			// Need to make this floor in case the low fi function is really cheap (otherwise might get 0 low-fi samples)
+			initialSampleSize = floor(totalInitialBudget / (1 + 2 * costRatio));
 			if(costRatio < TOL){
 				// If cost ratio is 0, cannot rely on the rule, simply put down twice as many samples.
 				initialSampleSizeLow = 2*initialSampleSize;
@@ -498,7 +499,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 
 		}else if(designOfExperimentsApproach.compare("all") == 0){
 			totalInitialBudget = realBudget;
-			initialSampleSize = round(totalInitialBudget / (1 + 2 * costRatio));
+			initialSampleSize = floor(totalInitialBudget / (1 + 2 * costRatio));
 			if(costRatio < TOL){
 				// If cost ratio is 0, cannot rely on the rule, simply put down twice as many samples.
 				initialSampleSizeLow = 2*initialSampleSize;
