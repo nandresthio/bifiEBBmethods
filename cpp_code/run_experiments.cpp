@@ -325,6 +325,10 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
+	}else if(name.compare("adaptiveCokriging") == 0){
+		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
+		model = new AdaptiveCoKriging(function, auxSolver, seed, printInfo, true);
+	
 	}else{
 		printf("Problem: Could not match method name! Specified %s. Stopping here...\n", name.c_str());							
 		exit(0);
@@ -444,11 +448,8 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	// Initialise model and design of experiments
 	SurrogateModel* model = processModelName(surrogateName, function, seed, true, false);
 	model->setAcquisitionFunction(acquisitionFunction);
-
-	// Try out having two 50d rounds of amoeba, and a further 2000 evaluations for the aux solver
-	// model->auxSolver_->maxEval_ = 200 * function->d_ + 2000;
-	// Now define the three initial design of experiments. small, half, all
-	// On the "small" case, want to generate a spread out sample
+	model->setCostRatio(costRatio);
+	// Get initial sample
 	SampleGenerator* sampleGenerator = new SampleGenerator(function, seed, printInfo);
 	vector<VectorXd> sampledPoints;
 	vector<VectorXd> sampledPointsLow;
@@ -468,70 +469,68 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
 			exit(0);
 		}
-
+		printf("Generating Co-Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
 		initialSampleSizeLow = 0;
 		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
 		sampledPoints = points.first;
 		// If was generated, I actually am not happy with this (not locally optimal), so optimise myself
 		// If read in, this should be a fast call which finds no further optimisation
 		model->scalePoints(sampledPoints);
-		sampleGenerator->morrisMitchellLocalOptimal(sampledPoints);
+		// Allowing a maximum of 1000 improvements in order to keep the running time manageable
+		sampleGenerator->morrisMitchellLocalOptimal(sampledPoints, 1000);
 		model->unscalePoints(sampledPoints);
 		sampledPointsValues = function->evaluateMany(sampledPoints);
 
-		// Old aproach, sample and optmise here
-		// sampledPoints = sampleGenerator->randomLHS(initialSampleSize);
-		// model->scalePoints(sampledPoints);
-		// sampleGenerator->morrisMitchellLocalOptimal(sampledPoints);
-		// model->unscalePoints(sampledPoints);
-		// sampledPointsValues = function->evaluateMany(sampledPoints);
-
-	}else if(surrogateName.compare("cokriging") == 0){
-		printf("CoKriging\n");
+	}else if(surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
 			initialSampleSizeLow = 2 * (function->d_ + 1);
 		}else if(designOfExperimentsApproach.compare("half") == 0){
-			printf("half\n");
 			totalInitialBudget = ceil(realBudget / 2.0);
-			initialSampleSize = ceil(totalInitialBudget / (1 + 2 * costRatio));
-			initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+			initialSampleSize = round(totalInitialBudget / (1 + 2 * costRatio));
+			if(costRatio < TOL){
+				// If cost ratio is 0, cannot rely on the rule, simply put down twice as many samples.
+				initialSampleSizeLow = 2*initialSampleSize;
+			}else{
+				initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+			}
+
 		}else if(designOfExperimentsApproach.compare("all") == 0){
 			totalInitialBudget = realBudget;
-			initialSampleSize = ceil(totalInitialBudget / (1 + 2 * costRatio));
-			initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+			initialSampleSize = round(totalInitialBudget / (1 + 2 * costRatio));
+			if(costRatio < TOL){
+				// If cost ratio is 0, cannot rely on the rule, simply put down twice as many samples.
+				initialSampleSizeLow = 2*initialSampleSize;
+			}else{
+				initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+			}
 		}else{
 			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
 			exit(0);
 		}
 
+		if(surrogateName.compare("cokriging") == 0){printf("Generating Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
+		if(surrogateName.compare("adaptiveCokriging") == 0){printf("Generating Adaptive Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
+		
+
 		// New way, ignore provided subset in case it is of a non optimise low-fidelity sample
 		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
 		sampledPointsLow = points.second;
-		sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
+		model->scalePoints(sampledPointsLow);
+		// Allowing a maximum of 1000 improvements in order to keep the running time manageable
+		sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow, 1000);
 		sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, initialSampleSize);
 		model->unscalePoints(sampledPointsLow);
 		model->unscalePoints(sampledPoints);
 		sampledPointsValues = function->evaluateMany(sampledPoints);
 		sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
-
-		// // Old way
-		// sampledPointsLow = sampleGenerator->randomLHS(initialSampleSizeLow);
-		// model->scalePoints(sampledPointsLow);
-		// sampleGenerator->morrisMitchellLocalOptimal(sampledPointsLow);
-		// sampledPoints = sampleGenerator->morrisMitchellSubset(sampledPointsLow, initialSampleSize);
-		// model->unscalePoints(sampledPointsLow);
-		// model->unscalePoints(sampledPoints);
-		// sampledPointsValues = function->evaluateMany(sampledPoints);
-		// sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
 	}else{
 		printf("Undefined behaviour for surrogate model specified %s! Stopping now...\n", surrogateName.c_str());
 	}
 	delete sampleGenerator;
 
 	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
-
 
 	// Now need to get information to assess model performance
 	int testSampleSize = 1000 * function->d_;
@@ -610,14 +609,14 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		// Here need to check that adding a high-fidelity sample will not go over budget
 		if((abs(budgetUsed  + 1 - realBudget) > TOL) && ((budgetUsed + 1) > realBudget)){break;}
 		// Get the next sample site and sample there
-		tuple<VectorXd, bool, bool> location = model->findNextSampleSite();
+		tuple<VectorXd, double, bool, bool> location = model->findNextSampleSite();
 		if(printInfo){
 			printf("Chosen point ");
 			printPoint(get<0>(location));
-			printf(" with acquisition value function of %.5f\n", model->evaluateAcquisitionFunction(get<0>(location)));
+			printf(" with acquisition value function of %.5f\n", get<1>(location));
 		}
 
-		model->addSample(get<0>(location), get<1>(location), get<2>(location));
+		model->addSample(get<0>(location), get<2>(location), get<3>(location));
 
 	}
 	if(printInfo){printf("Completed run, elapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}

@@ -1,4 +1,191 @@
 problemType problem method
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_all
+
+surrogateModelWithBudget (ToalBranin1.00,20,0.1,1-40) adaptiveCokriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin1.00,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin1.00,20,0.1,1-40) kriging_globalVariance_half
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.001,1-40) adaptiveCokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.001,1-40) cokriging_globalVarianceWithChoice_small
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.01,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.001,1-40) cokriging_globalVarianceWithChoice_half
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximation_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceApproximation_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceApproximation_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+
+
+
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximation_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximation_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_half
+
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+
+
+
+
+
+
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_half
+
+
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) c0kriging_globalVariance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVariance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_half
+
+
+
+
+
+
+
+
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_globalVariance_half
+
+
+
+
+
+
+
+surrogateModelWithBudget (MarchWillcoxRosenbrock1,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximation_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximation_half
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+
+
+
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_small
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_half
+
+
+
+
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_varianceWithChoice_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_variance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVarianceWithChoice_half
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) kriging_globalVariance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) kriging_globalVariance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_variance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_variance_half
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_globalVariance_small
+surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) kriging_globalVariance_half
+
+
+surrogateModelWithBudget (SongToalForretal0.90,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_small
+surrogateModelWithBudget (ToalBranin0.20,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_half
+surrogateModelWithBudget (ToalBranin0.50,20,0.1,1-40) cokriging_globalVarianceApproximationWithChoice_small
+surrogateModelWithBudget (LiuAckley10,10,0.1,1-1) cokriging_globalVarianceApproximationWithChoice_small
+
 surrogateModelWithBudget (SongToalForretal0.90,20,0,1-40) kriging_globalVariance_small
 surrogateModelWithBudget (SongToalForretal0.90,20,0,1-40) kriging_globalVarianceApproximation_small
 

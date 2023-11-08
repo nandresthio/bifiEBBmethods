@@ -53,6 +53,8 @@ public:
 
 	virtual ~SurrogateModel();
 
+	virtual void setCostRatio(double costRatio);
+
 	// Function which linearly scales a given point so that is lies in the unit hypercube [0,1]^d. It does so
 	// based on the domain of the given biFunction.
 	void scalePoint(VectorXd &point);
@@ -96,7 +98,7 @@ public:
 	// The sets "observations" and "observvationsLow" are the objective function values of f_h and f_l, respectively. Note that the
 	// default behaviour is to scale everything internally, that is the samples to lie in [0,1]^d, and the observations to lie
 	// within [0,1]. In order to stop this scaling, set functionScaling to false when initialising the surrogate model.
-	virtual void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow);
+	virtual void saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow);
 
 	// Function which adds a point to the saved sample. It evaluates the high-fidelity source and/or the low-fidelity source, scales
 	// the resulting values and adds them to the stored data.
@@ -127,7 +129,7 @@ public:
 
 	// Finds the location of the next sampling site, based on an already specified acquisition function
 	// Returns the location and two booleans specifying whether the high / low sources should be sampled
-	virtual tuple<VectorXd, bool, bool> findNextSampleSite();
+	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite();
 
 	class AcquisitionFunction : public Function{
 		public:
@@ -162,6 +164,8 @@ public:
 
 	string chosenAcquisiton_;				// String which defines what the acquisition function should be.
 	bool acquisitionIsMin_;					// Bool which defines whether the acquisition function is being minimised or maximised.
+
+	double costRatio_;						// The cost ratio of sampling the low-fidelity source; should be between 0 and 1.
 };
 
 
@@ -205,6 +209,8 @@ class Kriging : public SurrogateModel{
 
 	double kernelProductIntegral(double x1, double x2, double theta1, double theta2);
 
+	virtual void setWmatrix();
+
 	double globalVarianceReduction(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	double globalVarianceReductionApproximation(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
@@ -222,7 +228,7 @@ class Kriging : public SurrogateModel{
 	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
 
 	// Finds the location of the next sampling site, based on an already specified acquisition function
-	virtual tuple<VectorXd, bool, bool> findNextSampleSite() override;
+	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
 
 	// Calculates the concentrated likelihood function using the stored hyperparameters
 	double concentratedLikelihoodFunction();
@@ -285,7 +291,7 @@ class CoKriging: public Kriging{
 	~CoKriging() override;
 
 	// Override function which also saves data to the low fi krig model
-	void saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow) override;
+	void saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow) override;
 
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
@@ -311,13 +317,41 @@ class CoKriging: public Kriging{
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
 
+	VectorXd cVector(VectorXd &point);
+
+	VectorXd cLowVector(VectorXd &point);
+
+	MatrixXd cBothMatrix(VectorXd &x);
+
+	double w1product(VectorXd &point1, VectorXd &point2);
+
+	double w2product(VectorXd &point1, VectorXd &point2);
+
+	double w3product(VectorXd &point1, VectorXd &point2);
+
+	virtual void setWmatrix() override;
+
+	double globalVarianceReductionLowFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionHighFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionBothFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionApproximationLowFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionApproximationHighFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
+	double globalVarianceReductionApproximationBothFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+
 	// Returns the evaluation of the acquisition function at a particular location. It is assumed the point is unscaled i.e. it lies in the domain
 	// of the specified biFunction. Internally this flag might be modified to account for internal scaling. Note this function should not
 	// be called at this level, and instead should be implemented in each of the children classes.
 	virtual double evaluateAcquisitionFunction(VectorXd x) override;
 
+	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
+
 	// Finds the location of the next sampling site, based on an already specified acquisition function
-	virtual tuple<VectorXd, bool, bool> findNextSampleSite() override;
+	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
 
 	// Calculates the log likelihood function of the intermediate (i.e. error) model using the stored hyperparameters.
 	double intermediateConcentratedLikelihoodFunction();
@@ -352,6 +386,67 @@ class CoKriging: public Kriging{
 	LDLT<MatrixXd> cMatrixDecomposition_;	// C matrix decomposition, stored for speed of future calculations.
 	MatrixXd cMatrixInverse_;				// Again, to save time this matrix is stored once the hyperparameters have been chosen. It is calculated once and it is faster than using solve with the decomposition (if the inverse is only calculated once).
 
+	MatrixXd pMatrix_;
+	MatrixXd pMatrixTranspose_;
+	MatrixXd lMatrixInverse_;
+	MatrixXd lMatrixStarInverse_;
+	MatrixXd dMatrixInverse_;
+
+};
+
+
+
+
+// Adaptive surrogate model which, when being trained, chooses whether the low-fidelity source should be used.
+// If not, a Kriging model is used (trained only on high-fidelity data).
+// If yet, a Co-Kriging model is used (trained on low and high fidelity data).
+// It is a derived class of Co-Kriging since you can call exptected improvement, uncertainty, etc...
+class AdaptiveCoKriging: public CoKriging{
+	public:
+	// For details on this constructed, look at the constructor of the parent class SurrogateModel
+	AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+
+	~AdaptiveCoKriging() override;
+
+
+	void setCostRatio(double costRatio) override;
+
+	// Function which assesses the low fi function
+	void assessLowFiFunction();
+
+	// Override function which also saves data to the low fi krig model
+	void saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow) override;
+
+	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
+	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
+	// Finally it stores some useful values (i.e. mu and sigma) and matrices.
+	virtual void trainModel(bool optimiseHyperparameters = true) override;
+
+	// Calculates the surrogate surface value and variance at a particular point
+	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
+
+	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
+
+	// Finds the location of the next sampling site, based on an already specified acquisition function
+	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
+
+	class leastSquaresFunction : public Function{
+	public:
+
+		leastSquaresFunction(int d, vector<VectorXd> points, vector<double> values);
+
+		~leastSquaresFunction();
+
+		virtual double evaluate(VectorXd &point) override;
+
+		vector<VectorXd> points_;
+		vector<double> values_;
+	};
+
+
+	Kriging* krigingModel_;					// Kriging model trained on high fidelity data
+	CoKriging* cokrigingModel_;				// Kriging model trained on high and low fidelity data
+	bool lowFiDataIsUseful_;				// Bool which stated whether the low fi data should be used
 };
 
 

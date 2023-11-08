@@ -52,10 +52,22 @@ SurrogateModel::SurrogateModel(BiFidelityFunction* biFunction, AuxSolver* auxSol
 	minObservation_ = DBL_MAX;
 
 	chosenAcquisiton_ = "";
+
+	costRatio_ = -1;
 }
 
 SurrogateModel::~SurrogateModel(){
 	if(sampleGenerator_ != NULL){delete sampleGenerator_;}
+}
+
+void SurrogateModel::setCostRatio(double costRatio){
+	if(abs(costRatio) > TOL &&
+		abs(costRatio - 1) > TOL &&
+		(costRatio < 0 || costRatio_ > 1)){
+		printf("Error: Trying to set a cost ratio which is outside of the range [0,1], not saving this value.");
+		return;
+	}
+	costRatio_ = costRatio;
 }
 
 
@@ -126,7 +138,7 @@ void SurrogateModel::scaleTwoObservations(vector<double> &observations, vector<d
 	scaleObservations(observationsLow);
 }
 
-void SurrogateModel::saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow){
+void SurrogateModel::saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow){
 	scalePoints(points);
 	scalePoints(pointsLow);
 	scaleTwoObservations(observations, observationsLow);
@@ -206,15 +218,16 @@ void SurrogateModel::setAcquisitionFunction(string chosenAcquisiton){
 	}
 }
 
-tuple<VectorXd, bool, bool> SurrogateModel::findNextSampleSite(){
+tuple<VectorXd, double, bool, bool> SurrogateModel::findNextSampleSite(){
 	// Ok, so idea is simply to initialise solver and run it!
 	AcquisitionFunction* function = new AcquisitionFunction(this);
 	auxSolver_->updateProblem(function, acquisitionIsMin_);
 	VectorXd nextSampleSite = auxSolver_->optimise();
+	double value = evaluateAcquisitionFunction(nextSampleSite);
 	delete function;
 	// Return false false indicating neither source should be sampled. Passing this on to add sample should
 	// cause an error; these bools should be overriden by latter calls. 
-	return make_tuple(nextSampleSite, false, false);
+	return make_tuple(nextSampleSite, value, false, false);
 }
 
 
@@ -306,8 +319,15 @@ void Kriging::saveMuSigma(){
 	rMatrix_ = get<2>(data);
 	rMatrixDecomposition_ = get<3>(data);
 	modelWeights_ = get<4>(data);
-	rMatrixInverse_ = rMatrix_.inverse();
 
+	// rMatrixInverse_ = rMatrix_.inverse();
+	int n = rMatrix_.cols();
+	// I think that since I only find the inverse once here, I want to 
+	// do a decomposition once again. Using LU decomposition from Eigen,
+	// as it appears it is the most stable and accurate when finding an inverse.
+	// Note this should work even when the matrix is non invertible, which is a huge plus,
+	// even though this should not happen.
+	rMatrixInverse_ = rMatrix_.fullPivLu().solve(MatrixXd::Identity(n,n));
 	return;
 }
 
@@ -410,6 +430,26 @@ double Kriging::kernelProductIntegral(double x1, double x2, double theta1, doubl
 	return ( 1 / ( 2 * sqrt(theta1 + theta2) ) ) * sqrt(M_PI) * exp( -1 * ( (x1 - x2) * (x1 - x2) * theta1 * theta2 ) / ( theta1 + theta2 ) ) * ( erf( ( theta1 - x1 * theta1 + theta2 - x2 * theta2 ) / ( sqrt(theta1 + theta2) ) ) + erf( ( x1 * theta1 + x2 * theta2 ) / sqrt(theta1 + theta2) ) );
 }
 
+void Kriging::setWmatrix(){
+	int n = (int)sampledPoints_.size();
+	int d = (int)sampledPoints_[0].size();
+	MatrixXd wMatrix(n,n);
+	// Define matrix
+	auto it1 = sampledPoints_.begin();
+	for(int i = 0; i < n; i++, it1++){
+		auto it2 = it1;
+		for(int j = i; j < n; j++, it2++){
+			double product = 1;
+			for(int k = 0; k < d; k++){
+				product = product * 0.25 * sqrt(2 * M_PI * (1.0/theta_[k])) * exp(-1 * pow((*it1)(k) - (*it2)(k), 2) / (2 * (1.0/theta_[k]))) * (erf( (2 - ((*it1)(k) + (*it2)(k)) )/sqrt(2 * (1.0/theta_[k])) ) + erf( ((*it1)(k) + (*it2)(k))/sqrt(2 * (1.0/theta_[k])) ) ); 
+			}
+			wMatrix(i,j) = product;
+			wMatrix(j,i) = product;
+		}
+	}
+	wMatrix_ = wMatrix;
+}
+
 double Kriging::globalVarianceReduction(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
 	// Doing the approach detailed in "Replication or Exploration? Sequential Design for Stochastic Simulation Experiments"
 	// Gives an O(n^2) value of reduction in global variance but is restricted to having the p hyperparameters equal to 2.
@@ -448,6 +488,8 @@ double Kriging::globalVarianceReduction(VectorXd &x, bool pointIsScaled, bool un
 	return value;
 }
 
+
+
 double Kriging::globalVarianceReductionApproximation(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
 	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
 	// First calculate the determinant
@@ -466,16 +508,12 @@ double Kriging::globalVarianceReductionApproximation(VectorXd &x, bool pointIsSc
 		}
 		r(i) = exp(-sum);
 	}
-	// auto weights = rMatrixDecomposition_.solve(r);
 	auto weights = rMatrixInverse_ * r;
 	// This will cause problems if the point is very close to an already sampled point. If so, do not use it
 	denumerator = 1 - r.transpose() * weights;
-	// if(denumerator < TOL){return 0;}
-	// Now for each trial point calculate the nominator
+	// if(denumerator < 0.001){return 0;}
 	double sumNumerator = 0;
 	for(int j = 0;  j < (int)varianceTestPoints_.size(); j++){
-		// printf("For point ");
-		// printPoint(varianceTestPoints_[j]);
 		VectorXd rOld(n);
 		auto it = sampledPoints_.begin();
 		for(int i = 0; i < n; i++, it++){
@@ -485,25 +523,19 @@ double Kriging::globalVarianceReductionApproximation(VectorXd &x, bool pointIsSc
 			}
 			rOld(i) = exp(-sum);
 		}
-		// printf(" have correlations ");
-		// printPoint(rOld);
 		double sum = 0;
 		for(int k = 0; k < d; k++){
 			sum += theta_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j])(k)), pVector_[k]);
 		}
 
 		double sumPointComp = exp(-sum);
-		// printf(" and an addition %.5f ", sumPointComp);
 		double result = sigma_ * (rOld.transpose() * weights - sumPointComp) * (rOld.transpose() * weights - sumPointComp);
 		// It should not matter a whole lot but if want to unscale the output, need to multiply 
 		if(unscaleOutput){
 			result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
 		}
 		sumNumerator = sumNumerator + result;
-		
-		// printf("with change in variance is %.20f from original variance of %.20f with nrom %.20f\n", result / denumerator, uncertainty(varianceTestPoints_[j]), (xCopy - varianceTestPoints_[j]).norm());
 	}
-	// printf("Numerator of %.20f, denumerator of %.20f, value of %.20f\n", sumNumerator, denumerator, (sumNumerator / denumerator) / (int)varianceTestPoints_.size());
 	return (sumNumerator / denumerator) / (int)varianceTestPoints_.size();
 }
 
@@ -572,7 +604,8 @@ void Kriging::setAcquisitionFunction(string chosenAcquisiton){
 	}
 }
 
-tuple<VectorXd, bool, bool> Kriging::findNextSampleSite(){
+tuple<VectorXd, double, bool, bool> Kriging::findNextSampleSite(){
+
 	// If dealing with globalVarianceApproximation, choose a random set of points for monte-carlo integration
 	if(chosenAcquisiton_.compare("globalVarianceApproximation") == 0){
 		varianceTestPoints_ = sampleGenerator_->randomLHS(100);
@@ -580,27 +613,11 @@ tuple<VectorXd, bool, bool> Kriging::findNextSampleSite(){
 	}
 	// If dealing with globalVariance precalculate W matrix for speed
 	if(chosenAcquisiton_.compare("globalVariance") == 0){
-		int n = (int)sampledPoints_.size();
-		int d = (int)sampledPoints_[0].size();
-		MatrixXd wMatrix(n,n);
-		// Define matrix
-		auto it1 = sampledPoints_.begin();
-		for(int i = 0; i < n; i++, it1++){
-			auto it2 = it1;
-			for(int j = i; j < n; j++, it2++){
-				double product = 1;
-				for(int k = 0; k < d; k++){
-					product = product * 0.25 * sqrt(2 * M_PI * (1.0/theta_[k])) * exp(-1 * pow((*it1)(k) - (*it2)(k), 2) / (2 * (1.0/theta_[k]))) * (erf( (2 - ((*it1)(k) + (*it2)(k)) )/sqrt(2 * (1.0/theta_[k])) ) + erf( ((*it1)(k) + (*it2)(k))/sqrt(2 * (1.0/theta_[k])) ) ); 
-				}
-				wMatrix(i,j) = product;
-				wMatrix(j,i) = product;
-			}
-		}
-		wMatrix_ = wMatrix;
+		setWmatrix();
 	}
-	tuple<VectorXd, bool, bool> result = SurrogateModel::findNextSampleSite();
+	tuple<VectorXd, double, bool, bool> result = SurrogateModel::findNextSampleSite();
 	// Return the same, but specify that should only sample the high-fidelity source
-	return make_tuple(get<0>(result), true, false);
+	return make_tuple(get<0>(result), get<1>(result), true, false);
 }
 
 
@@ -617,8 +634,6 @@ double Kriging::concentratedLikelihoodFunction(){
 	if(maxLogLikelihood_ < logLikelihood){
 		maxLogLikelihood_ = logLikelihood;
 	}
-
-
 	return logLikelihood;
 }
 
@@ -724,12 +739,12 @@ CoKriging::CoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int r
 CoKriging::~CoKriging(){}
 
 
-void CoKriging::saveSample(vector<VectorXd> &points, vector<VectorXd> &pointsLow, vector<double> &observations, vector<double> &observationsLow){
+void CoKriging::saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow){
 	// First to the usual saving of the data
 	SurrogateModel::saveSample(points, pointsLow, observations, observationsLow);
 	// And now save the relevant things to lowFiKriging
-	lowFiKriging_->sampledPoints_ = pointsLow;
-	lowFiKriging_->sampledPointsValues_ = observationsLow;
+	lowFiKriging_->sampledPoints_ = sampledPointsLow_;
+	lowFiKriging_->sampledPointsValues_ = sampledPointsValuesLow_;
 	lowFiKriging_->maxObservation_ = maxObservation_;
 	lowFiKriging_->minObservation_ = minObservation_;
 	
@@ -801,7 +816,15 @@ void CoKriging::saveMuSigma(){
 	muCombined_ = get<0>(data1);
 	cMatrix_ = get<1>(data1);
 	cMatrixDecomposition_ = get<2>(data1);
-	cMatrixInverse_ = cMatrix_.inverse();
+	
+	// I think that since I only find the inverse once here, I want to 
+	// do a decomposition once again. Using LU decomposition from Eigen,
+	// as it appears it is the most stable and accurate when finding an inverse.
+	// Note this should work even when the matrix is non invertible, which is a huge plus,
+	// even though this should not happen.
+	int n = cMatrix_.cols();
+	cMatrixInverse_ = cMatrix_.fullPivLu().solve(MatrixXd::Identity(n,n)); 
+	
 	return;
 }
 
@@ -831,13 +854,14 @@ tuple<double, double, MatrixXd, LDLT<MatrixXd>> CoKriging::intermediateMuSigmaCa
 	VectorXd b(n);
 	for(int i = 0; i < n; i++){
 		one(i) = 1;
-		// b(i) = sampledPointsValues_[i] - rho_ * lowFiKriging_->surfaceValue(sampledPoints_[i]);
 		b(i) = sampledPointsValues_[i] - rho_ * lowFiSurfaceValues_[i];
 	}
+
 	LDLT<MatrixXd> bExpensiveMatrixDecomposition = bExpensiveMatrix.ldlt();
 	MatrixXd mu_top = one.transpose() * bExpensiveMatrixDecomposition.solve(b);
 	MatrixXd mu_bottom = one.transpose() * bExpensiveMatrixDecomposition.solve(one);
 	double mu = mu_top(0,0)/ mu_bottom(0,0);
+
 	MatrixXd sigma_m = (b - one*mu).transpose() * bExpensiveMatrixDecomposition.solve(b - one*mu);
 	double sigma = sigma_m(0,0)/n;
 
@@ -925,7 +949,6 @@ double CoKriging::intermediateConcentratedLikelihoodFunction(){
 	double logLikelihood = -n * logl(get<1>(data))/2 - logl((get<3>(data)).matrixL().determinant()) - logl((get<3>(data)).vectorD().prod())/2;
 
 	if(isinf(logLikelihood) || isnan(logLikelihood)){return -DBL_MAX;}
-	// if(get<1>(data) < TOL){return -DBL_MAX;}
 	if(maxLogLikelihood_ < logLikelihood){
 		maxLogLikelihood_ = logLikelihood;
 	}
@@ -936,8 +959,34 @@ double CoKriging::intermediateConcentratedLikelihoodFunction(){
 tuple<double, double> CoKriging::meanVarianceCalculator(VectorXd &x){
 	int nL = (int)lowFiKriging_->sampledPoints_.size();
 	int nH = (int)sampledPoints_.size();
-	int d = (int)sampledPoints_[0].size();
 	// First want c vector
+	VectorXd c = cVector(x);
+	VectorXd one(nL + nH);
+	VectorXd y(nL + nH);
+	for(int i = 0; i < nL; i++){
+		one(i) = 1;
+		y(i) = lowFiKriging_->sampledPointsValues_[i];
+	}
+	for(int i = 0; i < nH; i++){
+		one(nL + i) = 1;
+		y(nL + i) = sampledPointsValues_[i];
+	}
+
+	// New way
+	VectorXd rightHandSide = c.transpose() * cMatrixInverse_ * (y - one * muCombined_);
+	
+	double s_x = muCombined_ + rightHandSide(0);
+	rightHandSide = c.transpose() * cMatrixInverse_ * c;
+	double variance = rho_ * rho_ * sigmaL_ + sigmaB_ - rightHandSide(0);
+
+	return make_tuple(s_x, variance);
+}
+
+
+VectorXd CoKriging::cVector(VectorXd &x){
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	int d = (int)sampledPoints_[0].size();
 	VectorXd c(nL + nH);
 	// First deal with Rl(Xl, x)
 	auto it = lowFiKriging_->sampledPoints_.begin();
@@ -959,77 +1008,519 @@ tuple<double, double> CoKriging::meanVarianceCalculator(VectorXd &x){
 		}
 		c(nL + i) = rho_ * rho_ * sigmaL_ * exp(-sumC) + sigmaB_ * exp(-sumB);
 	}
+	return c;
+}
 
-	VectorXd one(nL + nH);
-	VectorXd y(nL + nH);
-	for(int i = 0; i < nL; i++){
-		one(i) = 1;
-		y(i) = lowFiKriging_->sampledPointsValues_[i];
+VectorXd CoKriging::cLowVector(VectorXd &x){
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	int d = (int)sampledPoints_[0].size();
+	VectorXd c(nL + nH);
+	// First deal with X_l
+	auto it = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it++){
+		double sum = 0;
+		for(int k = 0; k < d; k++){
+			sum += lowFiKriging_->theta_[k] * pow(abs((*it)(k) - x(k)), lowFiKriging_->pVector_[k]);
+		}
+		c(i) = sigmaL_ * exp(-sum);
 	}
-	for(int i = 0; i < nH; i++){
-		one(nL + i) = 1;
-		y(nL + i) = sampledPointsValues_[i];
+	// Deal with X_h
+	it = sampledPoints_.begin();
+	for(int i = 0; i < nH; i++, it++){
+		double sum = 0;
+		for(int k = 0; k < d; k++){
+			sum += lowFiKriging_->theta_[k] * pow(abs((*it)(k) - x(k)), lowFiKriging_->pVector_[k]);
+		}
+		c(nL + i) = rho_ * sigmaL_ * exp(-sum);
+	}
+	return c;
+}
+
+MatrixXd CoKriging::cBothMatrix(VectorXd &x){
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	VectorXd cLow = cLowVector(x);
+	VectorXd c = cVector(x);
+	MatrixXd cBoth(nL + nH, 2);
+	for(int i = 0; i < nL + nH; i++){
+		cBoth(i, 0) = cLow(i);
+		cBoth(i, 1) = c(i);
+	}
+	return cBoth;
+
+}
+
+double CoKriging::w1product(VectorXd &point1, VectorXd &point2){
+	double product = (rho_ * sigmaL_)*(rho_ * sigmaL_);
+	for(int i = 0; i < point1.size(); i++){
+		product = product * kernelProductIntegral(point1(i), point2(i), lowFiKriging_->theta_[i], lowFiKriging_->theta_[i]);
+	}
+	return product;
+}
+
+double CoKriging::w2product(VectorXd &point1, VectorXd &point2){	
+	double productLow = rho_ * rho_ * rho_ * sigmaL_ * sigmaL_;
+	double productDiff = rho_ * sigmaL_ * sigmaB_;
+	for(int i = 0; i < point1.size(); i++){
+		productLow = productLow * kernelProductIntegral(point1(i), point2(i), lowFiKriging_->theta_[i], lowFiKriging_->theta_[i]);
+		productDiff = productDiff * kernelProductIntegral(point1(i), point2(i), lowFiKriging_->theta_[i], thetaB_[i]);	
+	}
+	return productLow + productDiff;
+}
+
+double CoKriging::w3product(VectorXd &point1, VectorXd &point2){
+	double productLow = (rho_ * rho_ * sigmaL_) * (rho_ * rho_ * sigmaL_);
+	double productDiffOne = rho_ * rho_ * sigmaL_ * sigmaB_;
+	double productDiffTwo = rho_ * rho_ * sigmaL_ * sigmaB_;
+	double productDiff = sigmaB_ * sigmaB_;
+	for(int i = 0; i < point1.size(); i++){
+		productLow = productLow * kernelProductIntegral(point1(i), point2(i), lowFiKriging_->theta_[i], lowFiKriging_->theta_[i]);
+		productDiffOne = productDiffOne * kernelProductIntegral(point1(i), point2(i), lowFiKriging_->theta_[i], thetaB_[i]);
+		productDiffTwo = productDiffTwo * kernelProductIntegral(point1(i), point2(i), thetaB_[i], lowFiKriging_->theta_[i]);
+		productDiff = productDiff * kernelProductIntegral(point1(i), point2(i), thetaB_[i], thetaB_[i]);
+	}
+	return productLow + productDiffOne + productDiffTwo + productDiff;
+}
+
+
+void CoKriging::setWmatrix(){
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+
+	MatrixXd wMatrix(nH + nL, nH + nL);
+	// Start with W1
+	auto it1 = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it1++){
+		auto it2 = it1;
+		for(int j = i; j < nL; j++, it2++){
+			wMatrix(i,j) = w1product((*it1), (*it2));
+			wMatrix(j,i) = wMatrix(i,j);
+		}
+	}
+	// Now go with W2
+	it1 = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it1++){
+		auto it2 = sampledPoints_.begin();
+		for(int j = 0; j < nH; j++, it2++){
+			wMatrix(i,nL + j) = w2product((*it1), (*it2));
+			wMatrix(nL + j,i) = w2product((*it1), (*it2));
+		}
+	}
+	// Now go with W3
+	it1 = sampledPoints_.begin();
+	for(int i = 0; i < nH; i++, it1++){
+		auto it2 = it1;
+		for(int j = i; j < nH; j++, it2++){
+			wMatrix(nL + i, nL + j) = w3product((*it1), (*it2));
+			wMatrix(nL + j, nL + i) = wMatrix(nL + i,nL + j);
+		}
+	}
+	wMatrix_ = wMatrix;
+}
+
+double CoKriging::globalVarianceReductionLowFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	// First calculate the denumerator
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	double denumerator;
+	// Will want cL vector at this point
+	VectorXd cLow = cLowVector(xCopy);
+	// Will need this vector times inverse of C matrix in a couple of places, work it out
+	auto weights = cMatrixInverse_ * cLow;
+	denumerator = sigmaL_ - cLow.transpose() * weights;
+	// Populate wLow vector
+	VectorXd wLow(nL + nH);
+	auto it = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it++){
+		wLow(i) = w1product(xCopy, (*it));
+	}
+	it = sampledPoints_.begin();
+	for(int i = 0; i < nH; i++, it++){
+		wLow(nL + i) = w2product(xCopy, (*it));
+	}
+
+	double numerator = (weights.transpose() * wMatrix_ * weights)(0) - 2 * (wLow.transpose() * weights)(0) + w1product(xCopy, xCopy);
+	double result =  numerator / denumerator;
+	if(unscaleOutput){
+		result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+	}
+
+	return result;
+
+}
+
+double CoKriging::globalVarianceReductionHighFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	double denumerator;
+	// Will want cL vector at this point
+	VectorXd c = cVector(xCopy);
+	// Will need this vector times inverse of C matrix in a couple of places, work it out
+	auto weights = cMatrixInverse_ * c;
+	denumerator = rho_ * rho_ * sigmaL_ + sigmaB_ - c.transpose() * weights;
+	// Populate wLow vector
+	VectorXd wHigh(nL + nH);
+	auto it = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it++){
+		wHigh(i) = w2product((*it), xCopy);
+	}
+	it = sampledPoints_.begin();
+	for(int i = 0; i < nH; i++, it++){
+		wHigh(nL + i) = w3product((*it), xCopy);
+	}
+
+	double numerator = (weights.transpose() * wMatrix_ * weights)(0) - 2 * (wHigh.transpose() * weights)(0) + w3product(xCopy, xCopy);
+	double result =  numerator / denumerator;
+	if(unscaleOutput){
+		result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+	}
+	return result;
+}
+
+double CoKriging::globalVarianceReductionBothFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+
+	// First check that there is some variance coming from both sources. If not from low-fi source, only 
+	// reduction comes from sampling the high fi source. If not from high-fi source, only reduction comes from
+	// sampling the low fi source. If both sources have no variance then adding a point will not change anything.
+	if(sigmaL_ < TOL && sigmaB_ < TOL){return 0.0;}
+	if(sigmaL_ < TOL){return globalVarianceReductionHighFiSample(x, pointIsScaled, unscaleOutput);}
+	if(sigmaB_ < TOL){return globalVarianceReductionLowFiSample(x, pointIsScaled, unscaleOutput);}
+	
+
+	int nL = (int)lowFiKriging_->sampledPoints_.size();
+	int nH = (int)sampledPoints_.size();
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	// Will want cL vector at this point
+	MatrixXd cBothNext = cBothMatrix(xCopy);
+	MatrixXd sigmaMatrix(2,2);
+	sigmaMatrix(0,0) = sigmaL_;
+	sigmaMatrix(1,0) = rho_ * sigmaL_;
+	sigmaMatrix(0,1) = rho_ * sigmaL_;
+	sigmaMatrix(1,1) = rho_ * rho_ * sigmaL_ + sigmaB_;
+	
+	MatrixXd wBmatrix(2,2);
+	wBmatrix(0,0) = w1product(xCopy, xCopy);
+	wBmatrix(1,0) = w2product(xCopy, xCopy);
+	wBmatrix(0,1) = w2product(xCopy, xCopy);
+	wBmatrix(1,1) = w3product(xCopy, xCopy);
+
+	MatrixXd wBoth(nL + nH, 2);
+	auto it = lowFiKriging_->sampledPoints_.begin();
+	for(int i = 0; i < nL; i++, it++){
+		wBoth(i, 0) = w1product(xCopy, (*it));
+		wBoth(i, 1) = w2product((*it), xCopy);
+	}
+	it = sampledPoints_.begin();
+	for(int i = 0; i < nH; i++, it++){
+		wBoth(nL + i, 0) = w2product(xCopy, (*it));
+		wBoth(nL + i, 1) = w3product((*it), xCopy);
 	}
 
 	
-	// New way
-	// VectorXd rightHandSide = c.transpose() * cMatrixDecomposition_.solve(y - one * muCombined_);
-	VectorXd rightHandSide = c.transpose() * cMatrixInverse_ * (y - one * muCombined_);
+	auto weights = cMatrixInverse_ * cBothNext;
+	MatrixXd alphaMatrix = (sigmaMatrix - cBothNext.transpose() * weights).inverse();
+	MatrixXd topLeft = weights * alphaMatrix * weights.transpose();
+	MatrixXd topRight = - weights * alphaMatrix;
+	MatrixXd bottomLeft = - alphaMatrix * weights.transpose();
 	
-	double s_x = muCombined_ + rightHandSide(0);
-	// rightHandSide = c.transpose() * cMatrixDecomposition_.solve(c);
-	rightHandSide = c.transpose() * cMatrixInverse_ * c;
-	double variance = rho_ * rho_ * sigmaL_ + sigmaB_ - rightHandSide(0);
+	double result = 0;
+	for(int i = 0; i < topLeft.rows(); i++){
+		for(int j = 0; j < topLeft.cols(); j++){
+			result += topLeft(i,j) * wMatrix_(i,j);
+		}
+	}
+	for(int i = 0; i < topRight.rows(); i++){
+		for(int j = 0; j < topRight.cols(); j++){
+			result += topRight(i,j) * wBoth(i,j);
+		}
+	}
+	for(int i = 0; i < bottomLeft.rows(); i++){
+		for(int j = 0; j < bottomLeft.cols(); j++){
+			result += bottomLeft(i,j) * wBoth(j,i);
+		}
+	}
+	for(int i = 0; i < alphaMatrix.rows(); i++){
+		for(int j = 0; j < alphaMatrix.cols(); j++){
+			result += alphaMatrix(i,j) * wBmatrix(i,j);
+		}
+	}
 	
-	return make_tuple(s_x, variance);
+	if(unscaleOutput){
+		result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+	}
+	return result;
+
+
+}
+
+
+double CoKriging::globalVarianceReductionApproximationLowFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
+	// First calculate the denumerator
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	double denumerator;
+	int d = (int)sampledPoints_[0].size();
+	// Will want cL vector at this point
+	VectorXd cLow = cLowVector(xCopy);
+	// Will need this vector times inverse of C matrix in a couple of places, work it out
+	auto weights = cMatrixInverse_ * cLow;
+	// auto weights = cMatrixDecomposition_.solve(cLow);
+	denumerator = sigmaL_ - cLow.transpose() * weights;
+	// if(sigmaL_ < TOL || (denumerator/sigmaL_) < TOL){return 0;}
+	// Now for each trial point calculate the nominator
+	double sumNumerator = 0;
+	for(int j = 0;  j < (int)varianceTestPoints_.size(); j++){
+		// Want c vector at this point
+		VectorXd c = cVector(varianceTestPoints_[j]);
+		// Here want Rl between the test point and the candidate point
+		double sum = 0;
+		for(int k = 0; k < d; k++){
+			sum += lowFiKriging_->theta_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j](k))), lowFiKriging_->pVector_[k]);
+		}
+		double sumPointComp = exp(-sum);
+		double result = (c.transpose() * weights - rho_ * sigmaL_ * sumPointComp) * (c.transpose() * weights - rho_ * sigmaL_ * sumPointComp);
+		// It should not matter a whole lot but if want to unscale the output, need to multiply 
+		if(unscaleOutput){
+			result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+		}
+		sumNumerator = sumNumerator + result;
+	}
+	// Note the actual change is the negative of this value, but will keep the absolute and maximise (so as to maximise the reduction)
+	return (sumNumerator / denumerator) / (int)varianceTestPoints_.size();
+}
+
+double CoKriging::globalVarianceReductionApproximationHighFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
+	// First calculate the denumerator
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	double denumerator;
+	int d = (int)sampledPoints_[0].size();
+	// Will want cL vector at this point
+	VectorXd cXnext = cVector(xCopy);
+	// Will need this vector times inverse of C matrix in a couple of places, work it out
+	auto weights = cMatrixInverse_ * cXnext;
+	// auto weights = cMatrixDecomposition_.solve(cXnext);
+	denumerator = rho_ * rho_ * sigmaL_ + sigmaB_ - cXnext.transpose() * weights;
+	// if((rho_ * rho_ * sigmaL_ + sigmaB_) < TOL || (denumerator/(rho_ * rho_ * sigmaL_ + sigmaB_)) < TOL){return 0;}
+	// Now for each trial point calculate the nominator
+	double sumNumerator = 0;
+	for(int j = 0;  j < (int)varianceTestPoints_.size(); j++){
+		// Want c vector at this point
+		VectorXd c = cVector(varianceTestPoints_[j]);
+		// Here want Rl between the test point and the candidate point
+		double sumRl = 0;
+		double sumRdiff = 0;
+		for(int k = 0; k < d; k++){
+			sumRl += lowFiKriging_->theta_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j](k))), lowFiKriging_->pVector_[k]);
+			sumRdiff += thetaB_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j](k))), pBVector_[k]);
+			
+		}
+		double sumPointComp = rho_ * rho_ * sigmaL_ * exp(-sumRl) + sigmaB_ * exp(-sumRdiff);
+		double result = ((c.transpose() * weights)(0) - sumPointComp) * ((c.transpose() * weights)(0) - sumPointComp);
+		// It should not matter a whole lot but if want to unscale the output, need to multiply 
+		if(unscaleOutput){
+			result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+		}
+		sumNumerator = sumNumerator + result;
+		
+	}
+	// Note the actual change is the negative of this value, but will keep the absolute and maximise (so as to maximise the reduction)
+	return (sumNumerator / denumerator) / (int)varianceTestPoints_.size();
+}
+
+double CoKriging::globalVarianceReductionApproximationBothFiSample(VectorXd &x, bool pointIsScaled, bool unscaleOutput){
+	// First check that there is some variance coming from both sources. If not from low-fi source, only 
+	// reduction comes from sampling the high fi source. If not from high-fi source, only reduction comes from
+	// sampling the low fi source. If both sources have no variance then adding a point will not change anything.
+	if(sigmaL_ < TOL && sigmaB_ < TOL){return 0.0;}
+	if(sigmaL_ < TOL){return globalVarianceReductionApproximationHighFiSample(x, pointIsScaled, unscaleOutput);}
+	if(sigmaB_ < TOL){return globalVarianceReductionApproximationLowFiSample(x, pointIsScaled, unscaleOutput);}
+
+	// Trying the approach given in "Gaussian Process Regression: Active Data Selection and Test Point Rejection"
+	// First calculate the denumerator
+	VectorXd xCopy = x;
+	if(!pointIsScaled){scalePoint(xCopy);}
+	int d = (int)sampledPoints_[0].size();
+	// Will want cL vector at this point
+	MatrixXd cBothNext = cBothMatrix(xCopy);
+	MatrixXd sigmaMatrix(2,2);
+	sigmaMatrix(0,0) = sigmaL_;
+	sigmaMatrix(1,0) = rho_ * sigmaL_;
+	sigmaMatrix(0,1) = rho_ * sigmaL_;
+	sigmaMatrix(1,1) = rho_ * rho_ * sigmaL_ + sigmaB_;
+	
+	auto weights = cMatrixInverse_ * cBothNext;
+
+	MatrixXd alphaMatrix = (sigmaMatrix - cBothNext.transpose() * weights).inverse();
+	// auto alphaMatrixDecomposition = (sigmaMatrix - cBothNext.transpose() * weights).ldlt();
+
+	// Now for each trial point calculate the numerator
+	double sumNumerator = 0;
+	for(int j = 0;  j < (int)varianceTestPoints_.size(); j++){
+		// Want c vector at this point
+		VectorXd c = cVector(varianceTestPoints_[j]);
+		// Here want Rl between the test point and the candidate point
+		double sumRl = 0;
+		double sumRdiff = 0;
+		for(int k = 0; k < d; k++){
+			sumRl += lowFiKriging_->theta_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j](k))), lowFiKriging_->pVector_[k]);
+			sumRdiff += thetaB_[k] * pow(abs(xCopy(k) - (varianceTestPoints_[j](k))), pBVector_[k]);
+			
+		}
+		VectorXd kernelVector(2);
+		kernelVector(0) = rho_ * sigmaL_ * exp(-sumRl);
+		kernelVector(1) = rho_ * rho_ * sigmaL_ * exp(-sumRl) + sigmaB_ * exp(-sumRdiff);
+
+		auto matrixProduct = c.transpose() * weights;
+
+		double result = (matrixProduct * alphaMatrix * matrixProduct.transpose())(0) - (kernelVector.transpose() * alphaMatrix * matrixProduct.transpose())(0) - (matrixProduct * alphaMatrix * kernelVector)(0) + (kernelVector.transpose() * alphaMatrix * kernelVector)(0);
+		
+		// It should not matter a whole lot but if want to unscale the output, need to multiply 
+		if(unscaleOutput){
+			result = (maxObservation_ - minObservation_) * (maxObservation_ - minObservation_) * result;
+		}
+		sumNumerator = sumNumerator + result;	
+	}
+	// Note the actual change is the negative of this value, but will keep the absolute and maximise (so as to maximise the reduction)
+	return sumNumerator / (int)varianceTestPoints_.size();
 }
 
 double CoKriging::evaluateAcquisitionFunction(VectorXd x){
-	if(chosenAcquisiton_.compare("globalVariance") == 0){
-		// If want to do this, need to add a potential point, recalculate parameters, and assess overall variance
-		// Get predicted surface value
-		double predictedValue = scaleObservation(surfaceValue(x));
-		double predictedValueLow = scaleObservation(lowFiKriging_->surfaceValue(x));
-		scalePoint(x);
-		sampledPoints_.push_back(x);
-		sampledPointsLow_.push_back(x);
-		lowFiKriging_->sampledPoints_.push_back(x);
-
-		sampledPointsValues_.push_back(predictedValue);
-		sampledPointsValuesLow_.push_back(predictedValueLow);
-		lowFiKriging_->sampledPointsValues_.push_back(predictedValueLow);
-
-		lowFiKriging_->saveMuSigma();
-		lowFiSurfaceValues_.push_back(predictedValueLow);
-		saveMuSigma();
-
-		double integralVariance = 0;
-		for(int i = 0;  i < (int)varianceTestPoints_.size(); i++){
-			integralVariance += uncertainty(varianceTestPoints_[i]);
-		}
-		// Now need to remove the points and save parameters again
-		sampledPoints_.pop_back();
-		sampledPointsLow_.pop_back();
-		lowFiKriging_->sampledPoints_.pop_back();
-		sampledPointsValues_.pop_back();
-		sampledPointsValuesLow_.pop_back();
-		lowFiKriging_->sampledPointsValues_.pop_back();
-
-		lowFiKriging_->saveMuSigma();
-		lowFiSurfaceValues_.pop_back();
-		saveMuSigma();
-
-		return integralVariance / (int)varianceTestPoints_.size();
+	if(chosenAcquisiton_.compare("globalVarianceLow") == 0){
+		return  globalVarianceReductionLowFiSample(x);
+	}else if(chosenAcquisiton_.compare("globalVarianceHigh") == 0){
+		return globalVarianceReductionHighFiSample(x);
+	}else if(chosenAcquisiton_.compare("globalVarianceApproximationLow") == 0){
+		return globalVarianceReductionApproximationLowFiSample(x);
+	}else if(chosenAcquisiton_.compare("globalVarianceApproximationHigh") == 0){
+		return globalVarianceReductionApproximationHighFiSample(x);
+	}else if(chosenAcquisiton_.compare("globalVariance") == 0){
+		return globalVarianceReductionBothFiSample(x);
+	}else if(chosenAcquisiton_.compare("globalVarianceApproximation") == 0){
+		return globalVarianceReductionApproximationBothFiSample(x);
 	}else{
 		return Kriging::evaluateAcquisitionFunction(x);
 	}
 }
 
+void CoKriging::setAcquisitionFunction(string chosenAcquisiton){
+	// Adding this bool here in case the same model is assigned different acquisition functions
+	// at different stages. Essentially it looks like if sampling is based on global variance,
+	// need to restrict the p hyperparameters to be 2.
+	if(chosenAcquisiton.compare("globalVarianceWithChoice") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = false;
+		fixedP_ = true;
+	}else if(chosenAcquisiton.compare("globalVarianceApproximationWithChoice") == 0){
+		chosenAcquisiton_ = chosenAcquisiton;
+		acquisitionIsMin_ = false;
+		fixedP_ = false;	
+	}else{
+		Kriging::setAcquisitionFunction(chosenAcquisiton);
+	}
+}
 
-tuple<VectorXd, bool, bool> CoKriging::findNextSampleSite(){
-	tuple<VectorXd, bool, bool> result = Kriging::findNextSampleSite();
-	// Return the same, but specify that should only sample both sources
-	return make_tuple(get<0>(result), true, true);
+
+tuple<VectorXd, double, bool, bool> CoKriging::findNextSampleSite(){
+	// Kind of need to repeat the logic of Kriging and then skip the Kriging call, things run slightly different here
+	if(chosenAcquisiton_.compare("globalVarianceApproximationWithChoice") == 0){
+		varianceTestPoints_ = sampleGenerator_->randomLHS(100);
+		scalePoints(varianceTestPoints_);
+		// Change name to low and high, and find the best point for each
+		chosenAcquisiton_ = "globalVarianceApproximationLow";
+		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
+		VectorXd pointLow = get<0>(resultLow);
+		double valueLow = get<1>(resultLow);
+
+		chosenAcquisiton_ = "globalVarianceApproximationHigh";
+		tuple<VectorXd, double, bool, bool> resultHigh = SurrogateModel::findNextSampleSite();
+		VectorXd pointHigh = get<0>(resultHigh);
+		double valueHigh = get<1>(resultHigh);
+
+		if(printInfo_){
+			printf("Low fi point has value %.4f at point ", valueLow);
+			printPoint(pointLow);
+			printf("\nHigh fi point has value %.4f at point ", valueHigh);
+			printPoint(pointHigh);
+			printf("\n");
+		}
+		chosenAcquisiton_ = "globalVarianceApproximationWithChoice";
+
+		// Here want to choose which source to sample, base it on cost ratio.
+		// First check that this value has been set.
+		// Default should be -1 (which is incorrect), so just check this
+		if(costRatio_ < -0.5){
+			printf("Cost ratio needs to be used but it has not yet been set! Stopping now...\n");
+			exit(0);
+		}
+		// Now just divide low fi value by cost ratio for comparison. If the cost ratio is too close to 0, use 0.001 as a stand in
+		double relativeValueLow;
+		if(abs(costRatio_) < TOL){relativeValueLow = valueLow / 0.001;}
+		else{relativeValueLow = valueLow / costRatio_;}
+
+		if(valueHigh > relativeValueLow){
+			return make_tuple(pointHigh, valueHigh, true, false);
+		
+		}else{
+			return make_tuple(pointLow, relativeValueLow, false, true);
+		}
+		
+	}
+	// If dealing with globalVariance precalculate W matrix for speed
+	if(chosenAcquisiton_.compare("globalVarianceWithChoice") == 0){
+		setWmatrix();
+		// Change name to low and high, and find the best point for each
+		chosenAcquisiton_ = "globalVarianceLow";
+		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
+		VectorXd pointLow = get<0>(resultLow);
+		double valueLow = get<1>(resultLow);
+
+		chosenAcquisiton_ = "globalVarianceHigh";
+		tuple<VectorXd, double, bool, bool> resultHigh = SurrogateModel::findNextSampleSite();
+		VectorXd pointHigh = get<0>(resultHigh);
+		double valueHigh = get<1>(resultHigh);
+
+		if(printInfo_){
+			printf("Low fi point has value %.4f at point ", valueLow);
+			printPoint(pointLow);
+			printf("\nHigh fi point has value %.4f at point ", valueHigh);
+			printPoint(pointHigh);
+			printf("\n");
+		}
+		chosenAcquisiton_ = "globalVarianceWithChoice";
+
+		// Here want to choose which source to sample, base it on cost ratio.
+		// First check that this value has been set.
+		// Default should be -1 (which is incorrect), so just check this
+		if(costRatio_ < -0.5){
+			printf("Cost ratio needs to be used but it has not yet been set! Stopping now...\n");
+			exit(0);
+		}
+		// Now just divide low fi value by cost ratio for comparison. If the cost ratio is too close to 0, use 0.001 as a stand in
+		double relativeValueLow;
+		if(abs(costRatio_) < TOL){relativeValueLow = valueLow / 0.001;}
+		else{relativeValueLow = valueLow / costRatio_;}
+
+		if(valueHigh > relativeValueLow){
+			return make_tuple(pointHigh, valueHigh, true, false);
+		
+		}else{
+			return make_tuple(pointLow, relativeValueLow, false, true);
+		}
+
+		return make_tuple(pointHigh, valueHigh, true, false);
+	}
+	tuple<VectorXd, double, bool, bool> result = Kriging::findNextSampleSite();
+	// Return the same, but specify that should sample both sources
+	return make_tuple(get<0>(result), get<1>(result), true, true);
 }
 
 
@@ -1110,6 +1601,174 @@ int CoKriging::IntermediateConcentratedLikelihoodFunction::betterPoint(VectorXd 
 
 
 
+
+
+
+
+
+AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed, bool printInfo, bool functionScaling):
+	CoKriging(biFunction, auxSolver, randomSeed, printInfo, functionScaling){
+	krigingModel_ = new Kriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
+	cokrigingModel_ = new CoKriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
+	lowFiDataIsUseful_ = true;
+}
+
+AdaptiveCoKriging::~AdaptiveCoKriging(){}
+
+void AdaptiveCoKriging::assessLowFiFunction(){
+	// Ok so first thing is to get the locations at which the high fidelity function is known,
+	// the high fidelity function values, and the low fidelity function values (which are predicted 
+	// if the true value is not known.)
+	int n = (int)sampledPoints_.size();
+	int d = biFunction_->d_;
+
+	vector<VectorXd> locations = sampledPoints_;
+	vector<double> highFiValues = sampledPointsValues_;
+	vector<double> lowFiValues;
+	for(int i = 0; i < n; i++){
+		lowFiValues.push_back(cokrigingModel_->lowFiKriging_->surfaceValue(sampledPoints_[i], true, false));
+	}
+	vector<double> differences;
+	for(int i = 0; i < n; i++){
+		differences.push_back(highFiValues[i] - lowFiValues[i]);
+	}
+
+	if(printInfo_){printf("Assessing low fidelity function. Calculate Adjusted R^2 for a linear model\n");}
+	leastSquaresFunction* function = new leastSquaresFunction(d + 1, locations, differences);
+	auxSolver_->updateProblem(function, true);
+	VectorXd coefficients = auxSolver_->optimise();
+	// Now want the mean, sum of squares, and sum of residuals
+	double mean = 0;
+	for(int i = 0; i < n; i++){
+		mean += differences[i];
+	}
+	mean = mean / (int)differences.size();
+	double ssReg = 0;
+	for(int i = 0; i < n; i++){
+		// Get the prediction
+		double prediction = coefficients[0];
+		for(int j = 0; j < d; j++){
+			prediction += coefficients[j + 1] * locations[i](j);
+		}
+		ssReg += pow(prediction - mean, 2);
+	}
+	double ssRes = function->evaluate(coefficients);
+	double ssTot = ssRes + ssReg;
+	double adjustedR2 = 1 - (ssRes / ssTot) / (((double)n - d - 1) / ((double)n - 1));
+
+	// Ok so need sample to be unscaled when passing it to calculateLocalCorrelations, as the function scales internally
+	unscalePoints(locations);
+	unscaleObservations(highFiValues);
+	unscaleObservations(lowFiValues);
+	pair<vector<double>, vector<double> > lccs = calculateLocalCorrelations(biFunction_, 0.2, {0.4, 0.95}, locations, highFiValues, lowFiValues);
+	
+	double LCC_4_rel = lccs.second[0];
+	double LCC_95_rel = lccs.second[1];
+	double brh = locations.size() / (double)biFunction_->d_;
+	double br = locations.size() / (double)sampledPointsLow_.size();
+
+	// Ok I think I have it all! Print them and make a decision
+	if(printInfo_){printf("Have feature values of Brh %.2f, Br %.2f, LCC_0.4 %.2f, LCC_0.95 %.2f and R2_L %.2f\n", brh, br, LCC_4_rel, LCC_95_rel, adjustedR2);}
+
+	if(brh >= 18 || br >= 1 || LCC_4_rel <= 0.7){
+		if(printInfo_){printf("Instance belongs to first group, should NOT use low fi function.\n");}
+		lowFiDataIsUseful_ = false;
+	}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
+		if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
+		lowFiDataIsUseful_ = true;
+	}else if(brh <= 5){
+		if(printInfo_){printf("Instance belongs to third group and have little high fi data, should use low fi function.\n");}
+		lowFiDataIsUseful_ = true;
+	}else{
+		if(printInfo_){printf("Instance belongs to third group and have a fair amount of high fi data, should NOT use low fi function.\n");}
+		lowFiDataIsUseful_ = false;
+	}
+}
+
+void AdaptiveCoKriging::setCostRatio(double costRatio){
+	krigingModel_->setCostRatio(costRatio);
+	cokrigingModel_->setCostRatio(costRatio);
+}
+
+void AdaptiveCoKriging::saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow){
+	// Sounds like what I should do is simply call the save sample function on each of Kriging and CoKriging
+	krigingModel_->saveSample(points, pointsLow, observations, observationsLow);
+	cokrigingModel_->saveSample(points, pointsLow, observations, observationsLow);
+	// Not going to call the parent function as don't want to save anything internally.
+	SurrogateModel::saveSample(points, pointsLow, observations, observationsLow);
+}
+
+
+void AdaptiveCoKriging::trainModel(bool optimiseHyperparameters){
+	// Ok so first need to train Co-Kriging model
+	if(printInfo_){printf("Training cokriging model to estimate quality of low fi source.\n");}
+	cokrigingModel_->trainModel(optimiseHyperparameters);
+	// Now using the predicted low fi values at known high fi locations assess whether the low fi function looks usable
+	assessLowFiFunction();
+	// If the low fi function is usable, no need to train a Kriging model. If not usable, 
+	// need to train a Kriging model. 
+	// I think that whenever hyperparameters are optimised I should train the Kriging model just to keep it
+	// "up to date".
+	if(lowFiDataIsUseful_ && optimiseHyperparameters){
+		if(printInfo_){printf("Will not be using kriging model as low-fi looks benefitial, but training it as hyperparameters need to be optmised.\n");}
+		krigingModel_->trainModel(optimiseHyperparameters);
+	}else if(lowFiDataIsUseful_){
+		if(printInfo_){printf("Not training kriging model as low-fi looks benefitial and not tuning hyperparameters.\n");}
+	}else{
+		if(printInfo_){printf("Training kriging model as low-fi looks harmful.\n");}
+		krigingModel_->trainModel(optimiseHyperparameters);
+	}
+	printf("Training complete!\n");
+}
+
+
+tuple<double, double> AdaptiveCoKriging::meanVarianceCalculator(VectorXd &x){
+	if(lowFiDataIsUseful_){
+		return cokrigingModel_->meanVarianceCalculator(x);
+	}else{
+		return krigingModel_->meanVarianceCalculator(x);
+	}
+}
+
+void AdaptiveCoKriging::setAcquisitionFunction(string chosenAcquisiton){
+	cokrigingModel_->setAcquisitionFunction(chosenAcquisiton);
+	if(chosenAcquisiton.compare("globalVarianceWithChoice") == 0){
+		krigingModel_->setAcquisitionFunction("globalVariance");
+	}else if(chosenAcquisiton.compare("globalVarianceApproximationWithChoice") == 0){
+		krigingModel_->setAcquisitionFunction("globalVarianceApproximation");
+	}else{
+		krigingModel_->setAcquisitionFunction(chosenAcquisiton);
+	}
+}
+
+tuple<VectorXd, double, bool, bool> AdaptiveCoKriging::findNextSampleSite(){
+	if(lowFiDataIsUseful_){
+		return cokrigingModel_->findNextSampleSite();
+	}else{
+		return krigingModel_->findNextSampleSite();
+	}
+}
+
+
+AdaptiveCoKriging::leastSquaresFunction::leastSquaresFunction(int d, vector<VectorXd> points, vector<double> values):
+	Function(d, -100, 100),
+	points_(points),
+	values_(values){}
+
+AdaptiveCoKriging::leastSquaresFunction::~leastSquaresFunction(){}
+
+double AdaptiveCoKriging::leastSquaresFunction::evaluate(VectorXd &point){
+	// Just want to find the prediction at each point, and get the error squared
+	double sumError = 0;
+	for(int i = 0; i < (int)points_.size(); i++){
+		double prediction = point[0];
+		for(int j = 0; j < (int)points_[0].size(); j++){
+			prediction += point(j + 1) * points_[i](j);
+		}
+		sumError += pow(prediction - values_[i], 2);
+	}
+	return sumError;
+}
 
 
 
