@@ -561,26 +561,27 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	vector<double> oneWeights(testSampleSize, 1);
 	vector<double> modelVals;
 	// Should now be good to just iterate!
-	// Going to add a piece of code here where we only reoptimise hyperparameters for large samples every certain number of high fi samples
-	int highFiSamplesAtLastTrain = 0;
-	int intervalForTraining = 10;
-	int startIntervalTraining = 100;
+	// Changed things so this happens internally now.
+	// // Going to add a piece of code here where we only reoptimise hyperparameters for large samples every certain number of high fi samples
+	// int highFiSamplesAtLastTrain = 0;
+	// int intervalForTraining = 10;
+	// int startIntervalTraining = 100;
 	while(true){
 		// I do think I need to do one last train if this is the last iteration
 		double budgetUsed = model->sampledPoints_.size() + costRatio * model->sampledPointsLow_.size();
 
 		if((abs(budgetUsed  + 1 - realBudget) > TOL) && ((budgetUsed + 1) > realBudget)){
 			// Lower down will break out of the loop, so want to train
-			if(printInfo){printf("Train model as this is last iteration.\n");}
-			model->trainModel();
-		}else if(((int)model->sampledPoints_.size() >= startIntervalTraining) &&
-			((int)model->sampledPoints_.size() - highFiSamplesAtLastTrain) < intervalForTraining){
-			if(printInfo){printf("Train model, skip optimising hyperparameters as have %d high and %d low fidelity samples, and trained %d high fidelity samples ago.\n", (int)model->sampledPoints_.size(), (int)model->sampledPointsLow_.size(), (int)model->sampledPoints_.size() - highFiSamplesAtLastTrain);}
-			model->trainModel(false);
+			if(printInfo){printf("Train model with optimised hyperparameters as this is last iteration.\n");}
+			model->trainModel(true);
+		// }else if(((int)model->sampledPoints_.size() >= startIntervalTraining) &&
+		// 	((int)model->sampledPoints_.size() - highFiSamplesAtLastTrain) < intervalForTraining){
+		// 	if(printInfo){printf("Train model, skip optimising hyperparameters as have %d high and %d low fidelity samples, and trained %d high fidelity samples ago.\n", (int)model->sampledPoints_.size(), (int)model->sampledPointsLow_.size(), (int)model->sampledPoints_.size() - highFiSamplesAtLastTrain);}
+		// 	model->trainModel(false);
 		}else{
 			if(printInfo){printf("Train model.\n");}
 			model->trainModel();
-			highFiSamplesAtLastTrain = (int)model->sampledPoints_.size();
+			// highFiSamplesAtLastTrain = (int)model->sampledPoints_.size();
 		}
 		modelVals = model->multipleSurfaceValues(samples);
 		double minVal = model->unscaleObservation(*min_element(model->sampledPointsValues_.begin(), model->sampledPointsValues_.end()));

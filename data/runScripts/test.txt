@@ -1,4 +1,6 @@
 problemType problem method
+surrogateModelWithBudget (ToalPaciorek0.60,10,0.01,1-5) cokriging_globalVarianceWithChoice_small
+
 surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_all
 
 surrogateModelWithBudget (ToalBranin1.00,20,0.1,1-40) adaptiveCokriging_globalVariance_half

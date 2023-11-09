@@ -106,7 +106,9 @@ public:
 
 	// Parent function to train model. For this class this is empty and should not be called; each of the derived classes
 	// implement this based on how each of the models is trained.
-	virtual void trainModel(bool optimiseHyperparameters = true);
+	// If forcedOptimiseHyperparameters is true, will re optimise the hyperparameters. If not, 
+	// will optimise them "smartly" i.e. always for small samples, and only sometimes for large samples.
+	virtual void trainModel(bool forcedOptimiseHyperparameters = false);
 
 	// Returns the surrogate surface value prediction at a point. It is assumed the point is unscaled i.e. it lies in the domain
 	// of the specified biFunction, and that the desired output should not be scaled i.e. it should lie near the range of the biFunction.
@@ -166,6 +168,12 @@ public:
 	bool acquisitionIsMin_;					// Bool which defines whether the acquisition function is being minimised or maximised.
 
 	double costRatio_;						// The cost ratio of sampling the low-fidelity source; should be between 0 and 1.
+
+	// Can't reoptimise hyperparameters at every iteration for large data samples as it takes forever.
+	// Have a couple of checks to only reoptimise them every so often in this case
+	int startIntervalTraining_;
+	int intervalForTraining_;
+	int sampleSizeAtLastTrain_;
 };
 
 
@@ -186,7 +194,7 @@ class Kriging : public SurrogateModel{
 
 	// Main method which trains the Kriging model. Undergoes an auxiliary optimisation to find the best hyperparameters,
 	// then stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel(bool optimiseHyperparameters = true) override;
+	virtual void trainModel(bool forcedOptimiseHyperparameters = false) override;
 
 	// Method which uses ARS to find the best hyperparameter values by maximising the concentrated likelihood function.
 	virtual void trainHyperparameters();
@@ -296,7 +304,7 @@ class CoKriging: public Kriging{
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
 	// Finally it stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel(bool optimiseHyperparameters = true) override;
+	virtual void trainModel(bool forcedOptimiseHyperparameters = false) override;
 
 	// Method which finds the optimal hyperparameters for the difference model (i.e. theta_b's and p_b's) as well as rho
 	// using the ARS by maximising the intermediate concentrated likelihood function.
@@ -420,7 +428,7 @@ class AdaptiveCoKriging: public CoKriging{
 	// Main method which trains the CoKriging model. First trains a Kriging model on the low fidelity data,
 	// then undergoes an auxiliary optimisation to find the best hyperparameters of the difference model including rho.
 	// Finally it stores some useful values (i.e. mu and sigma) and matrices.
-	virtual void trainModel(bool optimiseHyperparameters = true) override;
+	virtual void trainModel(bool forcedOptimiseHyperparameters = false) override;
 
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;

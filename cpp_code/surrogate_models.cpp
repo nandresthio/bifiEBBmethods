@@ -54,6 +54,10 @@ SurrogateModel::SurrogateModel(BiFidelityFunction* biFunction, AuxSolver* auxSol
 	chosenAcquisiton_ = "";
 
 	costRatio_ = -1;
+
+	startIntervalTraining_ = 100;
+	intervalForTraining_ = 10;
+	sampleSizeAtLastTrain_ = 0;
 }
 
 SurrogateModel::~SurrogateModel(){
@@ -177,7 +181,7 @@ void SurrogateModel::addSample(VectorXd point, bool sampleHigh, bool sampleLow){
 
 
 
-void SurrogateModel::trainModel(bool optimiseHyperparameters){
+void SurrogateModel::trainModel(bool forcedOptimiseHyperparameters){
 	printf("Should not get to this train model call! Exiting now...\n");
 	exit(0);
 }
@@ -219,6 +223,7 @@ void SurrogateModel::setAcquisitionFunction(string chosenAcquisiton){
 }
 
 tuple<VectorXd, double, bool, bool> SurrogateModel::findNextSampleSite(){
+	if(printInfo_){printf("Find next sample site with acquisition function %s.\n", chosenAcquisiton_.c_str());}
 	// Ok, so idea is simply to initialise solver and run it!
 	AcquisitionFunction* function = new AcquisitionFunction(this);
 	auxSolver_->updateProblem(function, acquisitionIsMin_);
@@ -259,11 +264,27 @@ Kriging::Kriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int rando
 Kriging::~Kriging(){}
 
 
-void Kriging::trainModel(bool optimiseHyperparameters){
-	if(printInfo_){printf("Training kriging model - ");}
-	if(optimiseHyperparameters){
-		if(printInfo_){printf("optimising hyperparameters.\n");}
+void Kriging::trainModel(bool forcedOptimiseHyperparameters){
+	if(printInfo_){printf("Training kriging model with %d samples - ", (int)sampledPoints_.size());}
+	if(forcedOptimiseHyperparameters){
+		if(printInfo_){printf("optimising hyperparameters as user requested to regardless of other factors.\n");}
 		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+	
+	}else if((int)sampledPoints_.size() == sampleSizeAtLastTrain_){
+		if(printInfo_){printf("skipping  hyperparameter optimisation as sample size has not changed.\n");}
+	
+	}else if(startIntervalTraining_ >= (int)sampledPoints_.size()){
+		if(printInfo_){printf("optimising hyperparameters as working with manageable sample size.\n");}
+		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+
+	}else if(((int)sampledPoints_.size() - sampleSizeAtLastTrain_) >= intervalForTraining_){
+		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", (int)sampledPoints_.size() - sampleSizeAtLastTrain_);}
+		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+
+		
 	}else{
 		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
 	}
@@ -750,16 +771,29 @@ void CoKriging::saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, 
 	
 }
 
-void CoKriging::trainModel(bool optimiseHyperparameters){
-	if(printInfo_){printf("Training cokriging model, start with low fi kriging.\n");}
-	lowFiKriging_->trainModel(optimiseHyperparameters);
+void CoKriging::trainModel(bool forcedOptimiseHyperparameters){
+	if(printInfo_){printf("Training cokriging model with %d high- and %d low-fidelity samples, start with low fi kriging.\n", (int)sampledPoints_.size(), (int)sampledPointsLow_.size());}
+	lowFiKriging_->trainModel(forcedOptimiseHyperparameters);
 	if(printInfo_){printf("Training cokriging model, train intermediate model - ");}
-	if(optimiseHyperparameters){
-		if(printInfo_){printf("optimising hyperparameters.\n");}
+
+	if(forcedOptimiseHyperparameters){
+		if(printInfo_){printf("optimising hyperparameters as user requested to regardless of other factors.\n");}
 		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+
+	}else if(startIntervalTraining_ >= (int)sampledPoints_.size()){
+		if(printInfo_){printf("optimising hyperparameters as working with manageable sample size.\n");}
+		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+
+	}else if(((int)sampledPoints_.size() - sampleSizeAtLastTrain_) >= intervalForTraining_){
+		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", (int)sampledPoints_.size() - sampleSizeAtLastTrain_);}
+		trainHyperparameters();
+		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();	
 	}else{
 		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
 	}
+
 	saveMuSigma();	
 	return;
 }
@@ -1173,7 +1207,6 @@ double CoKriging::globalVarianceReductionHighFiSample(VectorXd &x, bool pointIsS
 	for(int i = 0; i < nH; i++, it++){
 		wHigh(nL + i) = w3product((*it), xCopy);
 	}
-
 	double numerator = (weights.transpose() * wMatrix_ * weights)(0) - 2 * (wHigh.transpose() * weights)(0) + w3product(xCopy, xCopy);
 	double result =  numerator / denumerator;
 	if(unscaleOutput){
@@ -1435,15 +1468,28 @@ tuple<VectorXd, double, bool, bool> CoKriging::findNextSampleSite(){
 		varianceTestPoints_ = sampleGenerator_->randomLHS(100);
 		scalePoints(varianceTestPoints_);
 		// Change name to low and high, and find the best point for each
-		chosenAcquisiton_ = "globalVarianceApproximationLow";
-		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
-		VectorXd pointLow = get<0>(resultLow);
-		double valueLow = get<1>(resultLow);
-
 		chosenAcquisiton_ = "globalVarianceApproximationHigh";
 		tuple<VectorXd, double, bool, bool> resultHigh = SurrogateModel::findNextSampleSite();
 		VectorXd pointHigh = get<0>(resultHigh);
 		double valueHigh = get<1>(resultHigh);
+
+		// It is possible that we already have way too many low fi sample points.
+		// If this is the case, do not bother looking for promising sample points.
+		if((int)sampledPointsLow_.size() >= 50 * biFunction_->d_){
+			if(printInfo_){
+				printf("Low fi point is skipped as already have %d low-fi points ", (int)sampledPointsLow_.size());
+				printf("\nHigh fi point has value %.4f at point ", valueHigh);
+				printPoint(pointHigh);
+				printf("\n");
+			}
+			chosenAcquisiton_ = "globalVarianceApproximationWithChoice";
+			return make_tuple(pointHigh, valueHigh, true, false);
+		}
+
+		chosenAcquisiton_ = "globalVarianceApproximationLow";
+		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
+		VectorXd pointLow = get<0>(resultLow);
+		double valueLow = get<1>(resultLow);
 
 		if(printInfo_){
 			printf("Low fi point has value %.4f at point ", valueLow);
@@ -1478,15 +1524,28 @@ tuple<VectorXd, double, bool, bool> CoKriging::findNextSampleSite(){
 	if(chosenAcquisiton_.compare("globalVarianceWithChoice") == 0){
 		setWmatrix();
 		// Change name to low and high, and find the best point for each
-		chosenAcquisiton_ = "globalVarianceLow";
-		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
-		VectorXd pointLow = get<0>(resultLow);
-		double valueLow = get<1>(resultLow);
-
 		chosenAcquisiton_ = "globalVarianceHigh";
 		tuple<VectorXd, double, bool, bool> resultHigh = SurrogateModel::findNextSampleSite();
 		VectorXd pointHigh = get<0>(resultHigh);
 		double valueHigh = get<1>(resultHigh);
+
+		// It is possible that we already have way too many low fi sample points.
+		// If this is the case, do not bother looking for promising sample points.
+		if((int)sampledPointsLow_.size() >= 50 * biFunction_->d_){
+			if(printInfo_){
+				printf("Low fi point is skipped as already have %d low-fi points ", (int)sampledPointsLow_.size());
+				printf("\nHigh fi point has value %.4f at point ", valueHigh);
+				printPoint(pointHigh);
+				printf("\n");
+			}
+			chosenAcquisiton_ = "globalVarianceWithChoice";
+			return make_tuple(pointHigh, valueHigh, true, false);
+		}
+
+		chosenAcquisiton_ = "globalVarianceLow";
+		tuple<VectorXd, double, bool, bool> resultLow = SurrogateModel::findNextSampleSite();
+		VectorXd pointLow = get<0>(resultLow);
+		double valueLow = get<1>(resultLow);
 
 		if(printInfo_){
 			printf("Low fi point has value %.4f at point ", valueLow);
@@ -1699,24 +1758,21 @@ void AdaptiveCoKriging::saveSample(vector<VectorXd> points, vector<VectorXd> poi
 }
 
 
-void AdaptiveCoKriging::trainModel(bool optimiseHyperparameters){
+void AdaptiveCoKriging::trainModel(bool forcedOptimiseHyperparameters){
 	// Ok so first need to train Co-Kriging model
 	if(printInfo_){printf("Training cokriging model to estimate quality of low fi source.\n");}
-	cokrigingModel_->trainModel(optimiseHyperparameters);
+	cokrigingModel_->trainModel(forcedOptimiseHyperparameters);
 	// Now using the predicted low fi values at known high fi locations assess whether the low fi function looks usable
 	assessLowFiFunction();
 	// If the low fi function is usable, no need to train a Kriging model. If not usable, 
 	// need to train a Kriging model. 
 	// I think that whenever hyperparameters are optimised I should train the Kriging model just to keep it
 	// "up to date".
-	if(lowFiDataIsUseful_ && optimiseHyperparameters){
-		if(printInfo_){printf("Will not be using kriging model as low-fi looks benefitial, but training it as hyperparameters need to be optmised.\n");}
-		krigingModel_->trainModel(optimiseHyperparameters);
-	}else if(lowFiDataIsUseful_){
-		if(printInfo_){printf("Not training kriging model as low-fi looks benefitial and not tuning hyperparameters.\n");}
+	if(lowFiDataIsUseful_){
+		if(printInfo_){printf("Not training kriging model as low-fi looks benefitial.\n");}
 	}else{
 		if(printInfo_){printf("Training kriging model as low-fi looks harmful.\n");}
-		krigingModel_->trainModel(optimiseHyperparameters);
+		krigingModel_->trainModel(forcedOptimiseHyperparameters);
 	}
 	printf("Training complete!\n");
 }
