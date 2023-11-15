@@ -214,22 +214,24 @@ index <- 0
 for(i in 1:length(functions)){
   func <- functions[[i]]
   dim <- dims[[i]]
-  if(dim != 2){next}
   print(func)
   print(dim)
-  seedsEnd <- 5
-  seedsPerRun <- 40
+  seedsEnd <- 20
+  seedsPerRun <- 20
+  if(dim > 2){seedsPerRun <- 10}
   if(dim > 5){seedsPerRun <- 5}
   if(dim > 10){seedsPerRun <- 1}
   for(model in c("kriging", "cokriging", "adaptiveCokriging")){
     for(acquisition in c("variance", "globalVariance", "globalVarianceWithChoice")){
       for(doe in c("small", "half", "all")){
+        # Kriging cannot have "with choice" as it always samples the high fi source
         if(model == "kriging" & acquisition == "globalVarianceWithChoice"){next}
+        # globalVariance_all and globalVarianceWithChoice should be identical
+        if(acquisition == "globalVarianceWithChoice" & doe == "all"){next}
         method <- paste0(model, "_", acquisition, "_", doe)
         for(budget in c(5, 10, 15, 20)){
           # if(doe == "all" & acquisition != "globalVariance"){next}
           for(costRatio in c(0.5, 0.1, 0.025, 0.01)){
-            if(model == "kriging" & costRatio != 0.5){next}
             index <- index + 1
             runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
             if(index != 1){
@@ -243,6 +245,9 @@ for(i in 1:length(functions)){
     }
   }
 }
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", quote = FALSE, row.names = FALSE)
+
+
 write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetSmallTest.txt", quote = FALSE, row.names = FALSE)
 
 # write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKrigingTest.txt", quote = FALSE, row.names = FALSE)
