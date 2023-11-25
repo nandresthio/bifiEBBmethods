@@ -1698,22 +1698,42 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	VectorXd coefficients = auxSolver_->optimise();
 	// Now want the mean, sum of squares, and sum of residuals
 	double mean = 0;
+	double min = differences[0];
+	double max = differences[0];
 	for(int i = 0; i < n; i++){
 		mean += differences[i];
+		if(min > differences[i]){min = differences[i];}
+		if(max < differences[i]){max = differences[i];}
 	}
 	mean = mean / (int)differences.size();
 	double ssReg = 0;
 	for(int i = 0; i < n; i++){
-		// Get the prediction
-		double prediction = coefficients[0];
-		for(int j = 0; j < d; j++){
-			prediction += coefficients[j + 1] * locations[i](j);
-		}
-		ssReg += pow(prediction - mean, 2);
+		ssReg += pow(differences[i] - mean, 2);
 	}
+
+	// for(int i = 0; i < n; i++){
+	// 	// Get the prediction
+	// 	double prediction = coefficients[0];
+	// 	for(int j = 0; j < d; j++){
+	// 		prediction += coefficients[j + 1] * locations[i](j);
+	// 	}
+	// 	printf("Prediction %.4f vs real %.4f\n", prediction, differences[i]);
+	// 	// ssReg += pow(prediction - mean, 2);
+	// }
 	double ssRes = function->evaluate(coefficients);
-	double ssTot = ssRes + ssReg;
-	double adjustedR2 = 1 - (ssRes / ssTot) / (((double)n - d - 1) / ((double)n - 1));
+
+	// printf("Got ssReg %.20f and ssRes %.20f\n", ssReg, ssRes);
+	// double ssTot = ssRes + ssReg;
+	// double adjustedR2 = 1 - (ssRes / ssTot) / (((double)n - d - 1) / ((double)n - 1));
+	double adjustedR2;
+	// If have very little data the model should be able to fit it trivially
+	if(n <= d + 1){adjustedR2 = 1;}
+	// If data is constant should also fit it perfectly (and will divide by 0 so need to set 1 by hand)
+	else if(abs(min - max) < TOL){adjustedR2 = 1;}
+	// Otherwise can use formula
+	else{adjustedR2 = 1 - (((double)n - 1) / ((double)n - d - 1)) * (ssRes / ssReg);}
+	
+	
 
 	// Ok so need sample to be unscaled when passing it to calculateLocalCorrelations, as the function scales internally
 	unscalePoints(locations);

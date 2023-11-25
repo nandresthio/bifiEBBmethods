@@ -469,7 +469,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
 			exit(0);
 		}
-		printf("Generating Co-Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
+		printf("Generating Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
 		initialSampleSizeLow = 0;
 		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
 		sampledPoints = points.first;

@@ -476,6 +476,16 @@ for(method in methods){
   
 }
 
+miniTest <- data[data$method == "adaptiveCokriging_globalVarianceWithChoice_all", ]
+miniTest2 <- data[data$method == "adaptiveCokriging_globalVariance_all", ]
+
+miniTest3 <- miniTest[miniTest$modelCorrelation != miniTest2$modelCorrelation, ]
+miniTest4 <- miniTest2[miniTest$modelCorrelation != miniTest2$modelCorrelation, ]
+
+  
+  
+
+
 # The next thing would be to correlate with features
 instances <- sapply(strsplit(testing$instance, "_"), "[[", 1)
 budgets <- as.numeric(gsub("B", "", sapply(strsplit(testing$instance, "_"), "[[", 2)))
