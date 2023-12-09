@@ -173,6 +173,10 @@ public:
 	// Have a couple of checks to only reoptimise them every so often in this case
 	int startIntervalTraining_;
 	int intervalForTraining_;
+	int startLargeIntervalTraining_;
+	int intervalForLargeTraining_;
+	int startVeryLargeIntervalTraining_;
+	int intervalForVeryLargeTraining_;
 	int sampleSizeAtLastTrain_;
 };
 

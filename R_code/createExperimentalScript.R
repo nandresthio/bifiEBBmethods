@@ -220,7 +220,7 @@ for(i in 1:length(functions)){
   seedsPerRun <- 20
   if(dim > 2){seedsPerRun <- 10}
   if(dim > 5){seedsPerRun <- 5}
-  if(dim > 10){seedsPerRun <- 1}
+  if(dim >= 10){seedsPerRun <- 1}
   for(model in c("kriging", "cokriging", "adaptiveCokriging")){
     for(acquisition in c("variance", "globalVariance", "globalVarianceWithChoice")){
       for(doe in c("small", "half", "all")){
@@ -233,7 +233,11 @@ for(i in 1:length(functions)){
           # if(doe == "all" & acquisition != "globalVariance"){next}
           for(costRatio in c(0.5, 0.1, 0.025, 0.01)){
             index <- index + 1
-            runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
+            if(acquisition == "globalVarianceWithChoice" & dim > 5){
+              runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = 1)
+            }else{
+              runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
+            }
             if(index != 1){
               existingRunData <- rbind(existingRunData, runData)
             }else{
@@ -248,7 +252,7 @@ for(i in 1:length(functions)){
 write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", quote = FALSE, row.names = FALSE)
 
 
-write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetSmallTest.txt", quote = FALSE, row.names = FALSE)
+# write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetSmallTest.txt", quote = FALSE, row.names = FALSE)
 
 # write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKrigingTest.txt", quote = FALSE, row.names = FALSE)
 

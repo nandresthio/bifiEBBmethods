@@ -2,12 +2,27 @@ source("R_code/dataProcessor.R")
 library(ggplot2)
 library(stringr)
 
-data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetSmallTest", 1, 1000)
-for(i in 1:37){
-  tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetSmallTest", 1 + i*1000, (1 + i)*1000)
+
+runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
+runs <- runs[1:59999,]
+str_which(runs$method, "adaptive")
+# Need to rerun these...
+
+# Also need to rerun dimension 1, budget 5, method half I believe?
+runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
+runs <- runs[1:8800,]
+intersect(intersect(str_which(runs$method, "half"), str_which(runs$method, "okriging")),
+          str_which(runs$problem, ",5,"))
+
+
+
+# data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1, 1000)
+data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 8801, 9000)
+for(i in 9:98){
+  tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1 + i*1000, (1 + i)*1000)
   data <- rbind(data, tempData)
 }
-tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetSmallTest",38001, 38016)
+tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget",99001, 99264)
 data <- rbind(data, tempData)
 
 features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
@@ -363,6 +378,7 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
         
         if(nrow(temp) == 0){
           print("Didn't find data!!")
+          print(instanceName)
           next
         }
         # Now want to get the final corr, error and time for each seed and for
@@ -385,12 +401,20 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
               next
             }
             
+            # Add a check here to see if all the budget was used up!
+            if(temp2[nrow(temp2), "budget"] - temp2[nrow(temp2), "usedBudget"] > 1){
+              print("Didn't use full budget!!")
+              print(method)
+              print(seed)
+              next
+            }
             repData[repData$seed == seed, c(paste0(method, "_corr"), paste0(method, "_err"))] <- temp2[nrow(temp2), c("modelCorrelation", "modelError")]
           }
         }
-        tempData <- as.data.frame(matrix(nrow = 1, ncol = 3))
-        colnames(tempData) <- c("instance", "relativeBudget", "costRatio")
+        tempData <- as.data.frame(matrix(nrow = 1, ncol = 4))
+        colnames(tempData) <- c("instance", "dimension", "relativeBudget", "costRatio")
         tempData$instance <- instanceName
+        tempData$dimension <- dimension
         tempData$relativeBudget <- relativeBudget
         tempData$costRatio <- costRatio
         
@@ -451,14 +475,31 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
 }
 
 
+temp <- data[data$method == "cokriging_variance_half" & 
+               data$functionName == "SongToalForretal0.90", ]
+temp <- temp[temp$method == "cokriging_variance_small" | temp$method == "cokriging_globalVariance_small", ]
+temp <- temp[temp$seed == 1, ]
+temp <- temp[temp$usedBudget < 5, ]
+
 augmented <- augmentSurrogateModelWithBudgetData(data, features, methods)
 
 testing <- augmented
+testing <- testing[rowSums(is.na(testing)) == 0, ]
+
+chosenMethods <- c("kriging_variance_half", "kriging_globalVariance_half")
+testing <- testing[testing$method %in% chosenMethods, ]
+
+
+
 testing <- augmented[augmented$relativeBudget == 5, ]
 
 chosenMethods <- c("kriging_variance_half", "kriging_globalVariance_half",
                    "cokriging_variance_half", "cokriging_globalVariance_half", "cokriging_globalVarianceWithChoice_half",
                    "adaptiveCokriging_variance_half", "adaptiveCokriging_globalVariance_half", "adaptiveCokriging_globalVarianceWithChoice_half")
+
+test <- testing[rowSums(is.na(testing)) > 0, ]
+test <- test[rowSums(is.na(test))]
+
 # Get some quick statistics
 for(method in methods){
   error0.005 <- round(sum(testing[paste0(method, "_errMean")] - 0.005 <= apply(testing[str_which(colnames(testing), "errMean")], 1, FUN = min)) / nrow(testing), 3)

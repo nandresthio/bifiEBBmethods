@@ -57,6 +57,10 @@ SurrogateModel::SurrogateModel(BiFidelityFunction* biFunction, AuxSolver* auxSol
 
 	startIntervalTraining_ = 100;
 	intervalForTraining_ = 10;
+	startLargeIntervalTraining_ = 200;
+	intervalForLargeTraining_ = 50;
+	startVeryLargeIntervalTraining_ = 500;
+	intervalForVeryLargeTraining_ = 100;
 	sampleSizeAtLastTrain_ = 0;
 }
 
@@ -265,25 +269,27 @@ Kriging::~Kriging(){}
 
 
 void Kriging::trainModel(bool forcedOptimiseHyperparameters){
-	if(printInfo_){printf("Training kriging model with %d samples - ", (int)sampledPoints_.size());}
+	int n = (int)sampledPoints_.size();
+	if(printInfo_){printf("Training kriging model with %d samples - ", n);}
 	if(forcedOptimiseHyperparameters){
 		if(printInfo_){printf("optimising hyperparameters as user requested to regardless of other factors.\n");}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+		sampleSizeAtLastTrain_ = n;
 	
-	}else if((int)sampledPoints_.size() == sampleSizeAtLastTrain_){
+	}else if(n == sampleSizeAtLastTrain_){
 		if(printInfo_){printf("skipping  hyperparameter optimisation as sample size has not changed.\n");}
 	
-	}else if(startIntervalTraining_ >= (int)sampledPoints_.size()){
+	}else if(startIntervalTraining_ >= n){
 		if(printInfo_){printf("optimising hyperparameters as working with manageable sample size.\n");}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+		sampleSizeAtLastTrain_ = n;
 
-	}else if(((int)sampledPoints_.size() - sampleSizeAtLastTrain_) >= intervalForTraining_){
-		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", (int)sampledPoints_.size() - sampleSizeAtLastTrain_);}
+	}else if((startLargeIntervalTraining_ > n && (n - sampleSizeAtLastTrain_) >= intervalForTraining_) ||
+				(startVeryLargeIntervalTraining_ > n && (n - sampleSizeAtLastTrain_) >= intervalForLargeTraining_) ||
+				(n - sampleSizeAtLastTrain_) >= intervalForVeryLargeTraining_){
+		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", n - sampleSizeAtLastTrain_);}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
-
+		sampleSizeAtLastTrain_ = n;
 		
 	}else{
 		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
@@ -772,24 +778,28 @@ void CoKriging::saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, 
 }
 
 void CoKriging::trainModel(bool forcedOptimiseHyperparameters){
-	if(printInfo_){printf("Training cokriging model with %d high- and %d low-fidelity samples, start with low fi kriging.\n", (int)sampledPoints_.size(), (int)sampledPointsLow_.size());}
+	int n = (int)sampledPoints_.size();
+	if(printInfo_){printf("Training cokriging model with %d high- and %d low-fidelity samples, start with low fi kriging.\n", n, (int)sampledPointsLow_.size());}
 	lowFiKriging_->trainModel(forcedOptimiseHyperparameters);
 	if(printInfo_){printf("Training cokriging model, train intermediate model - ");}
 
 	if(forcedOptimiseHyperparameters){
 		if(printInfo_){printf("optimising hyperparameters as user requested to regardless of other factors.\n");}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+		sampleSizeAtLastTrain_ = n;
 
-	}else if(startIntervalTraining_ >= (int)sampledPoints_.size()){
+	}else if(startIntervalTraining_ >= n){
 		if(printInfo_){printf("optimising hyperparameters as working with manageable sample size.\n");}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();
+		sampleSizeAtLastTrain_ = n;
 
-	}else if(((int)sampledPoints_.size() - sampleSizeAtLastTrain_) >= intervalForTraining_){
-		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", (int)sampledPoints_.size() - sampleSizeAtLastTrain_);}
+	}else if((startLargeIntervalTraining_ > n && (n - sampleSizeAtLastTrain_) >= intervalForTraining_) ||
+				(startVeryLargeIntervalTraining_ > n && (n - sampleSizeAtLastTrain_) >= intervalForLargeTraining_) ||
+				(n - sampleSizeAtLastTrain_) >= intervalForVeryLargeTraining_){
+		if(printInfo_){printf("optimising hyperparameters despite having large sample as it's been %d samples since last optimisation.\n", n - sampleSizeAtLastTrain_);}
 		trainHyperparameters();
-		sampleSizeAtLastTrain_ = (int)sampledPoints_.size();	
+		sampleSizeAtLastTrain_ = n;
+
 	}else{
 		if(printInfo_){printf("skipping  hyperparameter optimisation.\n");}
 	}
@@ -1726,7 +1736,7 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	// double ssTot = ssRes + ssReg;
 	// double adjustedR2 = 1 - (ssRes / ssTot) / (((double)n - d - 1) / ((double)n - 1));
 	double adjustedR2;
-	// If have very little data the model should be able to fit it trivially
+	// If have very little data the model should be able to fit it exactly
 	if(n <= d + 1){adjustedR2 = 1;}
 	// If data is constant should also fit it perfectly (and will divide by 0 so need to set 1 by hand)
 	else if(abs(min - max) < TOL){adjustedR2 = 1;}
