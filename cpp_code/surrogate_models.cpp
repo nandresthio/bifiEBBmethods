@@ -1673,12 +1673,17 @@ int CoKriging::IntermediateConcentratedLikelihoodFunction::betterPoint(VectorXd 
 
 
 
-
-
 AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed, bool printInfo, bool functionScaling):
 	CoKriging(biFunction, auxSolver, randomSeed, printInfo, functionScaling){
 	krigingModel_ = new Kriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
 	cokrigingModel_ = new CoKriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
+	lowFiDataIsUseful_ = true;
+}
+
+AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, Kriging* krigingModel, CoKriging* cokrigingModel, int randomSeed, bool printInfo, bool functionScaling):
+	CoKriging(biFunction, auxSolver, randomSeed, printInfo, functionScaling){
+	krigingModel_ = krigingModel;	
+	cokrigingModel_ = cokrigingModel;	
 	lowFiDataIsUseful_ = true;
 }
 

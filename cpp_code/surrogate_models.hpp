@@ -418,6 +418,10 @@ class AdaptiveCoKriging: public CoKriging{
 	// For details on this constructed, look at the constructor of the parent class SurrogateModel
 	AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
 
+	// Additional constructed where the kriging and cokriging models are isntantiated separately and passed to the constructor
+	AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, Kriging* krigingModel, CoKriging* cokrigingModel, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
+
+
 	~AdaptiveCoKriging() override;
 
 

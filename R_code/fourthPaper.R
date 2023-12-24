@@ -5,24 +5,75 @@ library(stringr)
 
 runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
 runs <- runs[1:59999,]
-str_which(runs$method, "adaptive")
+adaptiveRerun <- str_which(runs$method, "adaptive")
 # Need to rerun these...
 
 # Also need to rerun dimension 1, budget 5, method half I believe?
 runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
 runs <- runs[1:8800,]
-intersect(intersect(str_which(runs$method, "half"), str_which(runs$method, "okriging")),
-          str_which(runs$problem, ",5,"))
+halfRerun <- intersect(intersect(str_which(runs$method, "half"), str_which(runs$method, "okriging")),
+                str_which(runs$problem, ",5,"))
 
+allReruns <- union(halfRerun, adaptiveRerun)
+# Write them out in the 1000
+numbers <- ""
+chosenReruns <- allReruns[allReruns >= 50000 & allReruns < 60000]
+
+for(i in 1:length(chosenReruns)){
+  num <- chosenReruns[[i]]
+  continuousBefore <- (i != 1) && (chosenReruns[[i-1]] == (chosenReruns[[i]] - 1))
+  continuousAfter <- (i != length(chosenReruns)) && (chosenReruns[[i+1]] == (chosenReruns[[i]] + 1))
+  
+  if(continuousBefore & continuousAfter){next}
+  else if(continuousBefore){
+    numbers <- paste0(numbers, num-50000, ",")
+  }else if(continuousAfter){
+    numbers <- paste0(numbers, num-50000, "-")
+  }
+}
+
+numbers1
+numbers2
+numbers3
+numbers4
+numbers5
+numbers6
+
+
+
+
+for(num in allReruns){
+  if(num < 10000){
+    numbers1 <- paste0(numbers1, " ", num)
+  }
+  if(num >= 10000 & num < 20000){
+    numbers2 <- paste0(numbers2, " ", num-10000)
+  }
+  if(num >= 20000 & num < 30000){
+    numbers3 <- paste0(numbers3, " ", num-20000)
+  }
+  if(num >= 30000 & num < 40000){
+    numbers4 <- paste0(numbers4, " ", num-30000)
+  }
+  if(num >= 40000 & num < 50000){
+    numbers5 <- paste0(numbers5, " ", num-40000)
+  }
+  if(num >= 50000 & num < 60000){
+    numbers6 <- paste0(numbers6, " ", num-50000)
+  }
+}
+
+test <- augmented[str_which(augmented$instance, "COCOfunction16-dim2-seed1-disth1-height0-radius0.1-freq5-amp0.5"), 
+                  c(1,2,3,4, str_which(colnames(augmented), "half_corrMean"))]
 
 
 # data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1, 1000)
 data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 8801, 9000)
-for(i in 9:98){
+for(i in 9:99){
   tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1 + i*1000, (1 + i)*1000)
   data <- rbind(data, tempData)
 }
-tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget",99001, 99264)
+tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget",100001, 100160)
 data <- rbind(data, tempData)
 
 features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
@@ -354,27 +405,28 @@ ggplot(test, aes(x = usedBudget, y = time, color = method, pch = method)) +
 
 
 
-augmentSurrogateModelWithBudgetData <- function(data, features, methods){
-  split <- strsplit(features$instances, ",")
+augmentSurrogateModelWithBudgetData <- function(givenData, givenFeatures, givenMethods){
+  split <- strsplit(givenFeatures$instances, ",")
   instances <- gsub("[(]", "", sapply(split, "[[", 1))
-  order <- match(data$functionName, instances)
-  data$dimension <- features[order, "feature_dimension"]
-  data$relativeBudget <- data$budget / data$dimension
-  data$usedRelativeBudget <- data$usedBudget / data$dimension
-  seeds <- unique(data$seed)
-  costRatios <- unique(data$costRatio)
-  relativeBudgets <- unique(data$relativeBudget)
-  data$proportionUsedBudget <- data$usedBudget / data$budget
+  order <- match(givenData$functionName, instances)
+  givenData$dimension <- givenFeatures[order, "feature_dimension"]
+  givenData$relativeBudget <- givenData$budget / givenData$dimension
+  givenData$usedRelativeBudget <- givenData$usedBudget / givenData$dimension
+  seeds <- unique(givenData$seed)
+  costRatios <- unique(givenData$costRatio)
+  relativeBudgets <- unique(givenData$relativeBudget)
+  givenData$proportionUsedBudget <- givenData$usedBudget / givenData$budget
   index <- 1
-  for(instance in unique(data$functionName)){
+  for(instance in unique(givenData$functionName)){
+    print(instance)
     for(relativeBudget in relativeBudgets){
       for(costRatio in costRatios){
-        temp <- data[data$functionName == instance &
-                       data$relativeBudget == relativeBudget &
-                       data$costRatio == costRatio, ]
+        temp <- givenData[givenData$functionName == instance &
+                            givenData$relativeBudget == relativeBudget &
+                            givenData$costRatio == costRatio, ]
         
         instanceName <- paste0(instance, "_B", relativeBudget, "_Cr", costRatio)
-        print(instanceName)
+        # print(instanceName)
         
         if(nrow(temp) == 0){
           print("Didn't find data!!")
@@ -383,13 +435,13 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
         }
         # Now want to get the final corr, error and time for each seed and for
         # each method
-        repData <- as.data.frame(matrix(nrow = length(seeds), ncol = 1+2*length(methods)))
-        colnames(repData) <- c("seeds", paste0(methods, "_corr"), paste0(methods, "_err"))
+        repData <- as.data.frame(matrix(nrow = length(seeds), ncol = 1+2*length(givenMethods)))
+        colnames(repData) <- c("seeds", paste0(givenMethods, "_corr"), paste0(givenMethods, "_err"))
         
         # Now need to populate
         repData$seeds <- seeds
         # Now populate every other entry
-        for(method in methods){
+        for(method in givenMethods){
           for(seed in seeds){
             temp2 <- temp[temp$method == method &
                             temp$seed == seed, ]
@@ -414,13 +466,13 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
         tempData <- as.data.frame(matrix(nrow = 1, ncol = 4))
         colnames(tempData) <- c("instance", "dimension", "relativeBudget", "costRatio")
         tempData$instance <- instanceName
-        tempData$dimension <- dimension
+        tempData$dimension <- temp[1, "dimension"]
         tempData$relativeBudget <- relativeBudget
         tempData$costRatio <- costRatio
         
         # Now that have all the information, should get the median, mean,
         # and wilcoxon tests
-        for(method in methods){
+        for(method in givenMethods){
           corrs <- unlist(repData[paste0(method, "_corr")])
           errs <- unlist(repData[paste0(method, "_err")])
           performances <- c(mean(corrs),
@@ -431,20 +483,20 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
           minWilcoxonErr0.001 <- 1
           minWilcoxonErr0.005 <- 1
           minWilcoxonCorr0 <- 1
-          minWilcoxonCorr0.001 <- 1
           minWilcoxonCorr0.005 <- 1
+          minWilcoxonCorr0.01 <- 1
           
-          for(compMethod in methods){
+          for(compMethod in givenMethods){
             if(compMethod == method){next}
             compCorrs <- unlist(repData[paste0(compMethod, "_corr")])
             compErrs <- unlist(repData[paste0(compMethod, "_err")])
             # Now want to use the wilcoxon test
             hypSame <- wilcox.test(corrs, compCorrs, mu = 0, paired = FALSE, alternative = "l")
             minWilcoxonCorr0 <- min(minWilcoxonCorr0, hypSame$p.value)
-            hypSame <- wilcox.test(corrs, compCorrs, mu = 0.001, paired = FALSE, alternative = "l")
-            minWilcoxonCorr0.001 <- min(minWilcoxonCorr0.001, hypSame$p.value)
-            hypSame <- wilcox.test(corrs, compCorrs, mu = 0.005, paired = FALSE, alternative = "l")
+            hypSame <- wilcox.test(corrs, compCorrs, mu = -0.005, paired = FALSE, alternative = "l")
             minWilcoxonCorr0.005 <- min(minWilcoxonCorr0.005, hypSame$p.value)
+            hypSame <- wilcox.test(corrs, compCorrs, mu = -0.01, paired = FALSE, alternative = "l")
+            minWilcoxonCorr0.01 <- min(minWilcoxonCorr0.01, hypSame$p.value)
             
             hypSame <- wilcox.test(errs, compErrs, mu = 0, paired = FALSE, alternative = "g")
             minWilcoxonErr0 <- min(minWilcoxonErr0, hypSame$p.value)
@@ -455,9 +507,9 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
             
           }
           tempData[paste0(method, c("_corrMean", "_corrMedian", "_errMean", "_errMedian", 
-                                    "_corrWilcoxon0", "_corrWilcoxon0.001", "_corrWilcoxon0.005",
+                                    "_corrWilcoxon0", "_corrWilcoxon0.005", "_corrWilcoxon0.01",
                                     "_errWilcoxon0", "_errWilcoxon0.001", "_errWilcoxon0.005"))] <- c(performances,
-                                                                                                      minWilcoxonCorr0, minWilcoxonCorr0.001, minWilcoxonCorr0.005,
+                                                                                                      minWilcoxonCorr0, minWilcoxonCorr0.005, minWilcoxonCorr0.01,
                                                                                                       minWilcoxonErr0, minWilcoxonErr0.001, minWilcoxonErr0.005)
           
                             
@@ -474,34 +526,78 @@ augmentSurrogateModelWithBudgetData <- function(data, features, methods){
   return(processedData)
 }
 
+smallAugmented <- data[str_which(data$functionName, "Paciorek"), ]
 
-temp <- data[data$method == "cokriging_variance_half" & 
-               data$functionName == "SongToalForretal0.90", ]
-temp <- temp[temp$method == "cokriging_variance_small" | temp$method == "cokriging_globalVariance_small", ]
-temp <- temp[temp$seed == 1, ]
-temp <- temp[temp$usedBudget < 5, ]
+chosenMethods <- c(
+                    # "kriging_globalVariance_half"
+                   ,"cokriging_globalVariance_half"
+                   , "cokriging_globalVarianceWithChoice_half"
+                   , "adaptiveCokriging_globalVariance_half"
+                   , "adaptiveCokriging_globalVarianceWithChoice_half"
+                   )
 
-augmented <- augmentSurrogateModelWithBudgetData(data, features, methods)
+subsetData <- data[data$method %in% chosenMethods, ]
+subsetData <- subsetData[str_which(subsetData$functionName, "Paciorek"), ]
 
-testing <- augmented
+
+augmented <- augmentSurrogateModelWithBudgetData(data, features, chosenMethods)
+augmented <- augmented[1:2640,]
+
+chosenMethodsNoChoice <- c(
+                    # "kriging_globalVariance_half"
+                   "cokriging_globalVariance_half"
+                   # , "cokriging_globalVarianceWithChoice_half"
+                   , "adaptiveCokriging_globalVariance_half"
+                   # , "adaptiveCokriging_globalVarianceWithChoice_half"
+)
+
+subsetDataNoChoice <- data[data$method %in% chosenMethodsNoChoice, ]
+subsetDataNoChoice <- subsetDataNoChoice[str_which(subsetDataNoChoice$functionName, "Paciorek"), ]
+
+augmentedNoChoice <- augmentSurrogateModelWithBudgetData(subsetDataNoChoice, features, chosenMethodsNoChoice)
+augmentedNoChoice <- augmentedNoChoice[1:2640,]
+
+
+testing <- augmentedNoChoice
 testing <- testing[rowSums(is.na(testing)) == 0, ]
+testing <- testing[c(1:3,
+                     str_which(colnames(testing), "globalVariance_"))]
+# testing <- testing[c(1:3, str_which(colnames(testing), "globalVariance_half"))]
+testing <- testing[c(1:3, str_which(colnames(testing), "corrWilcoxon0.05"))]
+# testing <- testing[c(1:3, str_which(colnames(testing), "half"))]
+# testing$Best <- apply(testing[str_which(colnames(testing), "_corrMedian")], 1, FUN = max)
+testing$Best <- apply(testing[str_which(colnames(testing), "_corrWilcoxon0.05")], 1, FUN = max)
 
-chosenMethods <- c("kriging_variance_half", "kriging_globalVariance_half")
-testing <- testing[testing$method %in% chosenMethods, ]
+colSums(testing[4:(ncol(testing)-1)] >= 0.5)
+
+testing[4:(ncol(testing)-1)] <- testing$Best - testing[4:(ncol(testing)-1)]
 
 
 
-testing <- augmented[augmented$relativeBudget == 5, ]
 
-chosenMethods <- c("kriging_variance_half", "kriging_globalVariance_half",
-                   "cokriging_variance_half", "cokriging_globalVariance_half", "cokriging_globalVarianceWithChoice_half",
-                   "adaptiveCokriging_variance_half", "adaptiveCokriging_globalVariance_half", "adaptiveCokriging_globalVarianceWithChoice_half")
 
-test <- testing[rowSums(is.na(testing)) > 0, ]
-test <- test[rowSums(is.na(test))]
+secondTesting <- augmented[testing$cokriging_globalVariance_half_corrWilcoxon0.005 < 0.5 & 
+                             testing$adaptiveCokriging_globalVariance_half_corrWilcoxon0.005 > 0.5, ]
+secondTesting <- secondTesting[c(1:3,
+                     str_which(colnames(secondTesting), "corrMean"))]
+
+
+testing[4:(ncol(testing)-1)] <- testing$Best - testing[4:(ncol(testing)-1)]
+colSums(testing[4:(ncol(testing)-1)] < 0.01)
+
+
+testingData <- data
+testingData <- testingData[testingData$functionName == "ShiRosenbrock", ]
+testingData <- testingData[str_which(testingData$method, "okriging_globalVariance_half"), ]
+testingData <- testingData[testingData$costRatio == 0.01, ]
+testingData <- testingData[testingData$budget == 120, ]
+testingData <- testingData[testingData$seed == 1, ]
+
+testingData <- testingData[testingData$usedBudget >= 29, ]
+
 
 # Get some quick statistics
-for(method in methods){
+for(method in chosenMethods){
   error0.005 <- round(sum(testing[paste0(method, "_errMean")] - 0.005 <= apply(testing[str_which(colnames(testing), "errMean")], 1, FUN = min)) / nrow(testing), 3)
   error0.001 <- round(sum(testing[paste0(method, "_errMean")] - 0.001 <= apply(testing[str_which(colnames(testing), "errMean")], 1, FUN = min)) / nrow(testing), 3)
   error0.0005 <- round(sum(testing[paste0(method, "_errMean")] - 0.0005 <= apply(testing[str_which(colnames(testing), "errMean")], 1, FUN = min)) / nrow(testing), 3)
@@ -509,7 +605,7 @@ for(method in methods){
   corr0.005 <- round(sum(testing[paste0(method, "_corrMean")] + 0.005 >= apply(testing[str_which(colnames(testing), "corrMean")], 1, FUN = max)) / nrow(testing), 3)
   corr0.01 <- round(sum(testing[paste0(method, "_corrMean")] + 0.01 >= apply(testing[str_which(colnames(testing), "corrMean")], 1, FUN = max)) / nrow(testing), 3)
   
-  minTimesCorr <- round(sum(testing[paste0(method, "_corrMean")] == apply(testing[str_which(colnames(testing), "corrMean")], 1, FUN = min)) / nrow(testing), 3)
+  minTimesCorr <- round(sum(testing[paste0(method, "_corrMean")] == apply(testing[str_which(colnames(testing), "corrMean")], 1, FUN = max)) / nrow(testing), 3)
   minTimesErr <- round(sum(testing[paste0(method, "_errMean")] == apply(testing[str_which(colnames(testing), "errMean")], 1, FUN = min)) / nrow(testing), 3)
   
   print(paste0("Method ", method, " is best ", minTimesCorr, " of the time, and within 0.01, 0.005 and 0.001 of the best correlation ", corr0.01, ", ", corr0.005, " and ", corr0.001, " of the time."))

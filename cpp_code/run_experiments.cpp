@@ -326,8 +326,14 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
 	}else if(name.compare("adaptiveCokriging") == 0){
+		AuxSolver* auxSolverKrig = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
+		Kriging* modelKrig = new Kriging(function, auxSolverKrig, seed, printInfo, true);
+
+		AuxSolver* auxSolverCoKrig = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
+		CoKriging* modelCoKrig = new CoKriging(function, auxSolverCoKrig, seed, printInfo, true);
+
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
-		model = new AdaptiveCoKriging(function, auxSolver, seed, printInfo, true);
+		model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, seed, printInfo, true);
 	
 	}else{
 		printf("Problem: Could not match method name! Specified %s. Stopping here...\n", name.c_str());							
@@ -446,7 +452,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	string designOfExperimentsApproach = token;
 
 	// Initialise model and design of experiments
-	SurrogateModel* model = processModelName(surrogateName, function, seed, true, false);
+	SurrogateModel* model = processModelName(surrogateName, function, seed, true, true);
 	model->setAcquisitionFunction(acquisitionFunction);
 	model->setCostRatio(costRatio);
 	// Get initial sample
@@ -458,30 +464,33 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 
 	int initialSampleSize;
 	int initialSampleSizeLow;
-	if(surrogateName.compare("kriging") == 0){
-		if(designOfExperimentsApproach.compare("small") == 0){
-			initialSampleSize =	function->d_ + 1;
-		}else if(designOfExperimentsApproach.compare("half") == 0){
-			initialSampleSize =	ceil(realBudget / 2.0);
-		}else if(designOfExperimentsApproach.compare("all") == 0){
-			initialSampleSize = realBudget;
-		}else{
-			printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
-			exit(0);
-		}
-		printf("Generating Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
-		initialSampleSizeLow = 0;
-		pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
-		sampledPoints = points.first;
-		// If was generated, I actually am not happy with this (not locally optimal), so optimise myself
-		// If read in, this should be a fast call which finds no further optimisation
-		model->scalePoints(sampledPoints);
-		// Allowing a maximum of 1000 improvements in order to keep the running time manageable
-		sampleGenerator->morrisMitchellLocalOptimal(sampledPoints, 1000);
-		model->unscalePoints(sampledPoints);
-		sampledPointsValues = function->evaluateMany(sampledPoints);
 
-	}else if(surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
+	// Going to go for the same generating procedure for Kriging to compare what they do with the same budget
+	// if(surrogateName.compare("kriging") == 0){
+	// 	if(designOfExperimentsApproach.compare("small") == 0){
+	// 		initialSampleSize =	function->d_ + 1;
+	// 	}else if(designOfExperimentsApproach.compare("half") == 0){
+	// 		initialSampleSize =	ceil(realBudget / 2.0);
+	// 	}else if(designOfExperimentsApproach.compare("all") == 0){
+	// 		initialSampleSize = realBudget;
+	// 	}else{
+	// 		printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
+	// 		exit(0);
+	// 	}
+	// 	printf("Generating Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
+	// 	initialSampleSizeLow = 0;
+	// 	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
+	// 	sampledPoints = points.first;
+	// 	// If was generated, I actually am not happy with this (not locally optimal), so optimise myself
+	// 	// If read in, this should be a fast call which finds no further optimisation
+	// 	model->scalePoints(sampledPoints);
+	// 	// Allowing a maximum of 1000 improvements in order to keep the running time manageable
+	// 	sampleGenerator->morrisMitchellLocalOptimal(sampledPoints, 1000);
+	// 	model->unscalePoints(sampledPoints);
+	// 	sampledPointsValues = function->evaluateMany(sampledPoints);
+
+	// }else if(surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
+	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
@@ -490,11 +499,18 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			totalInitialBudget = ceil(realBudget / 2.0);
 			// Need to make this floor in case the low fi function is really cheap (otherwise might get 0 low-fi samples)
 			initialSampleSize = floor(totalInitialBudget / (1 + 2 * costRatio));
+
 			if(costRatio < TOL){
 				// If cost ratio is 0, cannot rely on the rule, simply put down twice as many samples.
 				initialSampleSizeLow = 2*initialSampleSize;
 			}else{
 				initialSampleSizeLow = (totalInitialBudget - initialSampleSize) / costRatio;
+			}
+
+			// Here going to revert to 2 high and 4 low in the very special case where I decided to start with only 1 high fi sample
+			if(initialSampleSize == 1){
+				initialSampleSize = 2;
+				initialSampleSizeLow = 4;
 			}
 
 		}else if(designOfExperimentsApproach.compare("all") == 0){
@@ -511,6 +527,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 			exit(0);
 		}
 
+		if(surrogateName.compare("kriging") == 0){printf("Generating Kriging sample with %d low-fidelity samples and %d high-fidelity samples, note low-fi samples will not be used.\n", initialSampleSizeLow, initialSampleSize);}
 		if(surrogateName.compare("cokriging") == 0){printf("Generating Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
 		if(surrogateName.compare("adaptiveCokriging") == 0){printf("Generating Adaptive Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
 		

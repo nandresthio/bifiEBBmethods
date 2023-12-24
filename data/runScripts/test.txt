@@ -1,4 +1,14 @@
 problemType problem method
+surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) adaptiveCokriging_globalVariance_half
+surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) cokriging_globalVariance_half
+surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) kriging_globalVariance_half
+
+
+surrogateModelWithBudget (ShiRosenbrock,20,0.01,1-5) adaptiveCokriging_globalVariance_half
+surrogateModelWithBudget (ShiRosenbrock,20,0.01,1-5) cokriging_globalVariance_half
+
+
+
 surrogateModelWithBudget (ToalPaciorek0.60,10,0.01,1-5) cokriging_globalVarianceWithChoice_small
 
 surrogateModelWithBudget (LiuAckley10,20,0.1,1-40) cokriging_globalVariance_all
