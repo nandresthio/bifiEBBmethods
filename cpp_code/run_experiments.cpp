@@ -452,7 +452,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	string designOfExperimentsApproach = token;
 
 	// Initialise model and design of experiments
-	SurrogateModel* model = processModelName(surrogateName, function, seed, true, true);
+	SurrogateModel* model = processModelName(surrogateName, function, seed, true, false);
 	model->setAcquisitionFunction(acquisitionFunction);
 	model->setCostRatio(costRatio);
 	// Get initial sample
