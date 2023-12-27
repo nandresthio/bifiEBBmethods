@@ -3,85 +3,89 @@ library(ggplot2)
 library(stringr)
 
 
-runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
-runs <- runs[1:59999,]
-adaptiveRerun <- str_which(runs$method, "adaptive")
-# Need to rerun these...
+# runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
+# runs <- runs[1:59999,]
+# adaptiveRerun <- str_which(runs$method, "adaptive")
+# # Need to rerun these...
+# 
+# # Also need to rerun dimension 1, budget 5, method half I believe?
+# runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
+# runs <- runs[1:8800,]
+# halfRerun <- intersect(intersect(str_which(runs$method, "half"), str_which(runs$method, "okriging")),
+#                 str_which(runs$problem, ",5,"))
+# 
+# allReruns <- union(halfRerun, adaptiveRerun)
+# # Write them out in the 1000
+# numbers <- ""
+# chosenReruns <- allReruns[allReruns >= 50000 & allReruns < 60000]
+# 
+# for(i in 1:length(chosenReruns)){
+#   num <- chosenReruns[[i]]
+#   continuousBefore <- (i != 1) && (chosenReruns[[i-1]] == (chosenReruns[[i]] - 1))
+#   continuousAfter <- (i != length(chosenReruns)) && (chosenReruns[[i+1]] == (chosenReruns[[i]] + 1))
+#   
+#   if(continuousBefore & continuousAfter){next}
+#   else if(continuousBefore){
+#     numbers <- paste0(numbers, num-50000, ",")
+#   }else if(continuousAfter){
+#     numbers <- paste0(numbers, num-50000, "-")
+#   }
+# }
+# 
+# numbers1
+# numbers2
+# numbers3
+# numbers4
+# numbers5
+# numbers6
+# 
+# 
+# 
+# 
+# for(num in allReruns){
+#   if(num < 10000){
+#     numbers1 <- paste0(numbers1, " ", num)
+#   }
+#   if(num >= 10000 & num < 20000){
+#     numbers2 <- paste0(numbers2, " ", num-10000)
+#   }
+#   if(num >= 20000 & num < 30000){
+#     numbers3 <- paste0(numbers3, " ", num-20000)
+#   }
+#   if(num >= 30000 & num < 40000){
+#     numbers4 <- paste0(numbers4, " ", num-30000)
+#   }
+#   if(num >= 40000 & num < 50000){
+#     numbers5 <- paste0(numbers5, " ", num-40000)
+#   }
+#   if(num >= 50000 & num < 60000){
+#     numbers6 <- paste0(numbers6, " ", num-50000)
+#   }
+# }
+# 
+# test <- augmented[str_which(augmented$instance, "COCOfunction16-dim2-seed1-disth1-height0-radius0.1-freq5-amp0.5"), 
+#                   c(1,2,3,4, str_which(colnames(augmented), "half_corrMean"))]
+# 
+# 
+# # data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1, 1000)
+# data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 8801, 9000)
+# for(i in 9:99){
+#   tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1 + i*1000, (1 + i)*1000)
+#   data <- rbind(data, tempData)
+# }
+# tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget",100001, 100160)
+# data <- rbind(data, tempData)
+# 
+# features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
 
-# Also need to rerun dimension 1, budget 5, method half I believe?
-runs <- read.table("data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", header = TRUE, sep = " ")
-runs <- runs[1:8800,]
-halfRerun <- intersect(intersect(str_which(runs$method, "half"), str_which(runs$method, "okriging")),
-                str_which(runs$problem, ",5,"))
-
-allReruns <- union(halfRerun, adaptiveRerun)
-# Write them out in the 1000
-numbers <- ""
-chosenReruns <- allReruns[allReruns >= 50000 & allReruns < 60000]
-
-for(i in 1:length(chosenReruns)){
-  num <- chosenReruns[[i]]
-  continuousBefore <- (i != 1) && (chosenReruns[[i-1]] == (chosenReruns[[i]] - 1))
-  continuousAfter <- (i != length(chosenReruns)) && (chosenReruns[[i+1]] == (chosenReruns[[i]] + 1))
-  
-  if(continuousBefore & continuousAfter){next}
-  else if(continuousBefore){
-    numbers <- paste0(numbers, num-50000, ",")
-  }else if(continuousAfter){
-    numbers <- paste0(numbers, num-50000, "-")
-  }
-}
-
-numbers1
-numbers2
-numbers3
-numbers4
-numbers5
-numbers6
-
-
-
-
-for(num in allReruns){
-  if(num < 10000){
-    numbers1 <- paste0(numbers1, " ", num)
-  }
-  if(num >= 10000 & num < 20000){
-    numbers2 <- paste0(numbers2, " ", num-10000)
-  }
-  if(num >= 20000 & num < 30000){
-    numbers3 <- paste0(numbers3, " ", num-20000)
-  }
-  if(num >= 30000 & num < 40000){
-    numbers4 <- paste0(numbers4, " ", num-30000)
-  }
-  if(num >= 40000 & num < 50000){
-    numbers5 <- paste0(numbers5, " ", num-40000)
-  }
-  if(num >= 50000 & num < 60000){
-    numbers6 <- paste0(numbers6, " ", num-50000)
-  }
-}
-
-test <- augmented[str_which(augmented$instance, "COCOfunction16-dim2-seed1-disth1-height0-radius0.1-freq5-amp0.5"), 
-                  c(1,2,3,4, str_which(colnames(augmented), "half_corrMean"))]
-
-
-# data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1, 1000)
-data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 8801, 9000)
-for(i in 9:99){
-  tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget", 1 + i*1000, (1 + i)*1000)
-  data <- rbind(data, tempData)
-}
-tempData <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudget",100001, 100160)
-data <- rbind(data, tempData)
-
+data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetHalfOnly", 1, 2880)
 features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
+
 
 
 methods <- unique(data$method)
 
-intervals <- seq(0,1,0.05)
+
 
 generatePlottableData <- function(data, features, methods, intervals){
   # I think the first thing is to match dimension to the data
@@ -376,8 +380,15 @@ generatePlottableData <- function(data, features, methods, intervals){
   
   return(plottingData)
 }
-  
-test <- generatePlottableData(data, features, methods, intervals)
+ 
+intervals <- seq(0.4,1,0.05)
+chosenMethodsNoChoice <- c("kriging_globalVariance_half",
+                           "cokriging_globalVariance_half",
+                           "cokriging_globalVarianceWithChoice_half",
+                           "adaptiveCokriging_globalVariance_half",
+                           "adaptiveCokriging_globalVarianceWithChoice_half")
+ 
+# test <- generatePlottableData(data, features, chosenMethodsNoChoice, intervals)
 
 test$usedBudget <- as.numeric(test$usedBudget)
 test$method <- as.factor(test$method)
@@ -386,15 +397,13 @@ test$relativeBudget <- as.factor(test$relativeBudget)
 
 
 temp <- test
-temp <- temp[str_which(temp$method, "globalVariance_small"), ]
-# temp <- temp[str_which(temp$method, "globalVariance"), ]
 
 
-ggplot(temp, aes(x = usedBudget, y = correlation, color = method, pch = relativeBudget)) + 
+ggplot(temp[temp$costRatio == 0.5 & temp$relativeBudget == 5, ], aes(x = usedBudget, y = correlation, color = method, pch = relativeBudget)) + 
   geom_line() + 
   geom_point()
 
-ggplot(temp, aes(x = usedBudget, y = error, color = method, pch = relativeBudget)) + 
+ggplot(temp[temp$costRatio == "all" & temp$relativeBudget == "all", ], aes(x = usedBudget, y = error, color = method, pch = relativeBudget)) + 
   geom_line() + 
   geom_point()
 
@@ -402,7 +411,15 @@ ggplot(test, aes(x = usedBudget, y = time, color = method, pch = method)) +
   geom_line() + 
   geom_point()
 
+testingData <- data
+# testingData <- testingData[testingData$functionName == "SongToalForretal0.90", ]
+testingData <- testingData[str_which(testingData$method, "cokriging_globalVariance_"), ]
+testingData <- testingData[testingData$costRatio == 0.01, ]
+testingData <- testingData[testingData$budget == 20, ]
+testingData <- testingData[testingData$modelCorrelation < 0.1, ]
+testingData <- testingData[testingData$usedBudget - testingData$budget > -1, ]
 
+testingData <- testingData[testingData$seed == 1, ]
 
 
 augmentSurrogateModelWithBudgetData <- function(givenData, givenFeatures, givenMethods){
@@ -416,6 +433,11 @@ augmentSurrogateModelWithBudgetData <- function(givenData, givenFeatures, givenM
   costRatios <- unique(givenData$costRatio)
   relativeBudgets <- unique(givenData$relativeBudget)
   givenData$proportionUsedBudget <- givenData$usedBudget / givenData$budget
+  
+  # Going to remove entries where went past available budget
+  givenData <- givenData[givenData$proportionUsedBudget <= 1, ]
+  
+  
   index <- 1
   for(instance in unique(givenData$functionName)){
     print(instance)
@@ -528,8 +550,7 @@ augmentSurrogateModelWithBudgetData <- function(givenData, givenFeatures, givenM
 
 smallAugmented <- data[str_which(data$functionName, "Paciorek"), ]
 
-chosenMethods <- c(
-                    # "kriging_globalVariance_half"
+chosenMethods <- c("kriging_globalVariance_half"
                    ,"cokriging_globalVariance_half"
                    , "cokriging_globalVarianceWithChoice_half"
                    , "adaptiveCokriging_globalVariance_half"
@@ -544,8 +565,8 @@ augmented <- augmentSurrogateModelWithBudgetData(data, features, chosenMethods)
 augmented <- augmented[1:2640,]
 
 chosenMethodsNoChoice <- c(
-                    # "kriging_globalVariance_half"
-                   "cokriging_globalVariance_half"
+                    "kriging_globalVariance_half"
+                   ,"cokriging_globalVariance_half"
                    # , "cokriging_globalVarianceWithChoice_half"
                    , "adaptiveCokriging_globalVariance_half"
                    # , "adaptiveCokriging_globalVarianceWithChoice_half"
@@ -563,21 +584,26 @@ testing <- testing[rowSums(is.na(testing)) == 0, ]
 testing <- testing[c(1:3,
                      str_which(colnames(testing), "globalVariance_"))]
 # testing <- testing[c(1:3, str_which(colnames(testing), "globalVariance_half"))]
-testing <- testing[c(1:3, str_which(colnames(testing), "corrWilcoxon0.05"))]
+testing <- testing[c(1:3, str_which(colnames(testing), "corrWilcoxon0.01"))]
 # testing <- testing[c(1:3, str_which(colnames(testing), "half"))]
 # testing$Best <- apply(testing[str_which(colnames(testing), "_corrMedian")], 1, FUN = max)
-testing$Best <- apply(testing[str_which(colnames(testing), "_corrWilcoxon0.05")], 1, FUN = max)
+testing$Best <- apply(testing[str_which(colnames(testing), "_corrWilcoxon0.01")], 1, FUN = max)
 
+testing <- testing[testing$adaptiveCokriging_globalVariance_half_corrMean < testing$cokriging_globalVariance_half_corrMean &
+                     testing$adaptiveCokriging_globalVariance_half_corrMean < testing$kriging_globalVariance_half_corrMean, ]
 colSums(testing[4:(ncol(testing)-1)] >= 0.5)
 
 testing[4:(ncol(testing)-1)] <- testing$Best - testing[4:(ncol(testing)-1)]
 
 
 
+secondTesting <- augmentedNoChoice[testing$adaptiveCokriging_globalVariance_half_corrWilcoxon0.01 < 0.5, ]
+secondTesting <- secondTesting[c(1:3,
+                     str_which(colnames(secondTesting), "corrMean"))]
 
-
-secondTesting <- augmented[testing$cokriging_globalVariance_half_corrWilcoxon0.005 < 0.5 & 
-                             testing$adaptiveCokriging_globalVariance_half_corrWilcoxon0.005 > 0.5, ]
+secondTesting <- augmentedNoChoice[testing$kriging_globalVariance_half_corrWilcoxon0.01 >= 0.5 & 
+                             testing$cokriging_globalVariance_half_corrWilcoxon0.01 < 0.5 &
+                             testing$adaptiveCokriging_globalVariance_half_corrWilcoxon0.01 >= 0.5, ]
 secondTesting <- secondTesting[c(1:3,
                      str_which(colnames(secondTesting), "corrMean"))]
 
@@ -586,13 +612,18 @@ testing[4:(ncol(testing)-1)] <- testing$Best - testing[4:(ncol(testing)-1)]
 colSums(testing[4:(ncol(testing)-1)] < 0.01)
 
 
-testingData <- data
-testingData <- testingData[testingData$functionName == "ShiRosenbrock", ]
-testingData <- testingData[str_which(testingData$method, "okriging_globalVariance_half"), ]
-testingData <- testingData[testingData$costRatio == 0.01, ]
-testingData <- testingData[testingData$budget == 120, ]
-testingData <- testingData[testingData$seed == 1, ]
+DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1
+SongToalForretal0.90_B10_Cr0.1
 
+testingData <- data
+testingData <- testingData[testingData$functionName == "DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1", ]
+testingData <- testingData[str_which(testingData$method, "_globalVariance_"), ]
+testingData <- testingData[testingData$costRatio == 0.5, ]
+testingData <- testingData[testingData$budget == 10, ]
+
+testingData <- testingData[testingData$usedBudget == 9.5, ]
+
+testingData <- testingData[testingData$seed == 4, ]
 testingData <- testingData[testingData$usedBudget >= 29, ]
 
 

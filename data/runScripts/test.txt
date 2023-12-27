@@ -1,4 +1,11 @@
 problemType problem method
+surrogateModelWithBudget (DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1,20,0.5,4-4) adaptiveCokriging_globalVariance_half
+surrogateModelWithBudget (DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1,20,0.5,4-4) adaptiveCokrigingAdvanced_globalVariance_half
+surrogateModelWithBudget (DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1,20,0.5,4-4) cokriging_globalVariance_half
+surrogateModelWithBudget (DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1,20,0.5,4-4) kriging_globalVariance_half
+
+
+
 surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) adaptiveCokriging_globalVariance_half
 surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) cokriging_globalVariance_half
 surrogateModelWithBudget (MarchWillcoxRosenbrock3,5,0.5,1-1) kriging_globalVariance_half

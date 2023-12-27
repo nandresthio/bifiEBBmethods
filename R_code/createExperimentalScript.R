@@ -252,6 +252,50 @@ for(i in 1:length(functions)){
 write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudget.txt", quote = FALSE, row.names = FALSE)
 
 
+
+functions <- read.table("cpp_code/bifiEBBbenchmarks/data/availableFunctions/chosenTestSuiteN312.txt", header = FALSE, sep = " ", fill = TRUE)[[1]]
+functions <- c(functions, paste0("SOLAR", c('0.90', '0.80', '0.70', '0.60', '0.50', '0.40', '0.30', '0.20', '0.10')))
+# Order them by dimension
+features <- read.table("data/features/featuresClean.txt", header = TRUE, sep = " ")
+order <- match(functions, features$instances)
+dims <- features[order, 'feature_dimension']
+functions <- functions[order(match(dims, 1:20))]
+dims <- dims[order(match(dims, 1:20))]
+index <- 0
+for(i in 1:length(functions)){
+  func <- functions[[i]]
+  dim <- dims[[i]]
+  print(func)
+  print(dim)
+  seedsEnd <- 20
+  seedsPerRun <- 20
+  # if(dim > 2){seedsPerRun <- 10}
+  # if(dim > 5){seedsPerRun <- 5}
+  # if(dim >= 10){seedsPerRun <- 1}
+  for(budget in c(5, 10, 15, 20)){
+    for(costRatio in c(0.5, 0.1, 0.025, 0.01)){
+      for(model in c("kriging", "cokriging", "adaptiveCokriging", "adaptiveCokrigingAdvanced")){
+        for(acquisition in c("globalVariance", "globalVarianceWithChoice")){
+          for(doe in c("half")){
+            # Kriging cannot have "with choice" as it always samples the high fi source
+            if(model == "kriging" & acquisition == "globalVarianceWithChoice"){next}
+            method <- paste0(model, "_", acquisition, "_", doe)
+            index <- index + 1
+            runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
+            if(index != 1){
+              existingRunData <- rbind(existingRunData, runData)
+            }else{
+              existingRunData <- runData
+            }
+          }
+        }
+      }
+    }
+  }
+}
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetHalfOnly.txt", quote = FALSE, row.names = FALSE)
+
+
 # write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetSmallTest.txt", quote = FALSE, row.names = FALSE)
 
 # write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetKrigingTest.txt", quote = FALSE, row.names = FALSE)

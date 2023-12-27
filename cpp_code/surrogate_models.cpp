@@ -839,17 +839,33 @@ void CoKriging::trainHyperparameters(){
 		lowFiSurfaceValues_.push_back(lowFiKriging_->surfaceValue(sampledPoints_[i], true, false));
 	}
 	maxLogLikelihood_ = -DBL_MAX;
-	IntermediateConcentratedLikelihoodFunction* function = new IntermediateConcentratedLikelihoodFunction(2*d + 1, lowerBound, upperBound, this);
+	IntermediateConcentratedLikelihoodFunction* function;
+	if(fixedP_){
+		lowerBound[d] = -1000;
+		upperBound[d] = 1000;
+		function = new IntermediateConcentratedLikelihoodFunction(d + 1, lowerBound, upperBound, this);
+	}else{
+		function = new IntermediateConcentratedLikelihoodFunction(2*d + 1, lowerBound, upperBound, this);
+	}
 	auxSolver_->updateProblem(function, false);
 	VectorXd hyperparameters = auxSolver_->optimise();
 	delete function;
 	// Extract two vectors, and store!
 	for(int i = 0; i < d; i++){
 		thetaB_[i] = pow(10,hyperparameters(i));
-		pBVector_[i] = hyperparameters(d + i);
+
+		if(fixedP_){
+			pBVector_[i] = 2;
+		}else{
+			pBVector_[i] = hyperparameters(d + i);
+		}
 	}
 	// Last value is rho
-	rho_ = hyperparameters(2*d);
+	if(fixedP_){
+		rho_ = hyperparameters(d);
+	}else{
+		rho_ = hyperparameters(2*d);
+	}
 }
 
 void CoKriging::saveMuSigma(){
@@ -1469,6 +1485,9 @@ void CoKriging::setAcquisitionFunction(string chosenAcquisiton){
 	}else{
 		Kriging::setAcquisitionFunction(chosenAcquisiton);
 	}
+
+	// Need to apply the fixedP_ restriction to the low fi Kriging model as well!
+	lowFiKriging_->fixedP_ = fixedP_;
 }
 
 
@@ -1609,11 +1628,20 @@ double CoKriging::IntermediateConcentratedLikelihoodFunction::evaluate(VectorXd 
 	for(int i = 0; i < d; i++){
 		theta[i] = pow(10,point(i));
 		// theta[i] = point(i);
-		pVector[i] = point(d + i);
+		if(cokrigingModel_->fixedP_){
+			pVector[i] = 2;
+		}else{
+			pVector[i] = point(d + i);
+		}
 	}
 	cokrigingModel_->thetaB_ = theta;
 	cokrigingModel_->pBVector_ = pVector;
-	cokrigingModel_->rho_ = point(2*d);
+	if(cokrigingModel_->fixedP_){
+		cokrigingModel_->rho_ = point(d);
+	}else{
+		cokrigingModel_->rho_ = point(2*d);
+	}
+	
 	// Get info needed, data contains mu, sigma, R and R^-1 in that order
 	return cokrigingModel_->intermediateConcentratedLikelihoodFunction();
 }
@@ -1673,18 +1701,20 @@ int CoKriging::IntermediateConcentratedLikelihoodFunction::betterPoint(VectorXd 
 
 
 
-AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int randomSeed, bool printInfo, bool functionScaling):
+AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, bool advanced, int randomSeed, bool printInfo, bool functionScaling):
 	CoKriging(biFunction, auxSolver, randomSeed, printInfo, functionScaling){
 	krigingModel_ = new Kriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
 	cokrigingModel_ = new CoKriging(biFunction_, auxSolver_, randomSeed_, printInfo_, functionScaling);	
-	lowFiDataIsUseful_ = true;
+	lowFiDataIsUseful_ = false;
+	advanced_ = advanced;
 }
 
-AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, Kriging* krigingModel, CoKriging* cokrigingModel, int randomSeed, bool printInfo, bool functionScaling):
+AdaptiveCoKriging::AdaptiveCoKriging(BiFidelityFunction* biFunction, AuxSolver* auxSolver, Kriging* krigingModel, CoKriging* cokrigingModel, bool advanced, int randomSeed, bool printInfo, bool functionScaling):
 	CoKriging(biFunction, auxSolver, randomSeed, printInfo, functionScaling){
 	krigingModel_ = krigingModel;	
 	cokrigingModel_ = cokrigingModel;	
-	lowFiDataIsUseful_ = true;
+	lowFiDataIsUseful_ = false;
+	advanced_ = advanced;
 }
 
 AdaptiveCoKriging::~AdaptiveCoKriging(){}
@@ -1764,18 +1794,42 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	// Ok I think I have it all! Print them and make a decision
 	if(printInfo_){printf("Have feature values of Brh %.2f, Br %.2f, LCC_0.4 %.2f, LCC_0.95 %.2f and R2_L %.2f\n", brh, br, LCC_4_rel, LCC_95_rel, adjustedR2);}
 
-	if(brh >= 18 || br >= 1 || LCC_4_rel <= 0.7){
-		if(printInfo_){printf("Instance belongs to first group, should NOT use low fi function.\n");}
-		lowFiDataIsUseful_ = false;
-	}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
-		if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
-		lowFiDataIsUseful_ = true;
-	}else if(brh <= 5){
-		if(printInfo_){printf("Instance belongs to third group and have little high fi data, should use low fi function.\n");}
-		lowFiDataIsUseful_ = true;
+	if(!advanced_){
+
+		if(brh >= 18 || br >= 1 || LCC_4_rel <= 0.7){
+			if(printInfo_){printf("Instance belongs to first group, should NOT use low fi function.\n");}
+			lowFiDataIsUseful_ = false;
+		}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
+			if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
+			lowFiDataIsUseful_ = true;
+		}else if(brh <= 5){
+			if(printInfo_){printf("Instance belongs to third group and have little high fi data, should use low fi function.\n");}
+			lowFiDataIsUseful_ = true;
+		}else{
+			if(printInfo_){printf("Instance belongs to third group and have a fair amount of high fi data, should NOT use low fi function.\n");}
+			lowFiDataIsUseful_ = false;
+		}
+	
 	}else{
-		if(printInfo_){printf("Instance belongs to third group and have a fair amount of high fi data, should NOT use low fi function.\n");}
-		lowFiDataIsUseful_ = false;
+		// Ok so idea is to base decisions of brh also on previous decisions of low fi data usefulness
+		if(br >= 1 || LCC_4_rel <= 0.7){
+			if(printInfo_){printf("Instance belongs to first group (not based on brh), should NOT use low fi function.\n");}
+			lowFiDataIsUseful_ = false;
+		
+		}else if(brh >= 18 && !lowFiDataIsUseful_){
+			if(printInfo_){printf("Instance belongs to first group based on Brh and in previous iteration did not use low fi, should NOT use low fi function.\n");}
+			lowFiDataIsUseful_ = false;
+		
+		}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
+			if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
+			lowFiDataIsUseful_ = true;
+		}else{
+			if(printInfo_){
+				printf("Instance belongs to third group, will continue as before: ");
+				if(lowFiDataIsUseful_){printf("Use low fi function.\n");}
+				else{printf("Do NOT use low fi function.\n");}
+			}
+		}
 	}
 }
 

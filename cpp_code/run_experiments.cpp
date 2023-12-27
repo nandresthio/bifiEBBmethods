@@ -325,7 +325,7 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
-	}else if(name.compare("adaptiveCokriging") == 0){
+	}else if(name.compare("adaptiveCokriging") == 0 || name.compare("adaptiveCokrigingAdvanced") == 0){
 		AuxSolver* auxSolverKrig = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		Kriging* modelKrig = new Kriging(function, auxSolverKrig, seed, printInfo, true);
 
@@ -333,7 +333,11 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		CoKriging* modelCoKrig = new CoKriging(function, auxSolverCoKrig, seed, printInfo, true);
 
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
-		model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, seed, printInfo, true);
+		if(name.compare("adaptiveCokriging") == 0){
+			model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, false, seed, printInfo, true);
+		}else{
+			model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, true, seed, printInfo, true);
+		}
 	
 	}else{
 		printf("Problem: Could not match method name! Specified %s. Stopping here...\n", name.c_str());							
@@ -490,7 +494,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	// 	sampledPointsValues = function->evaluateMany(sampledPoints);
 
 	// }else if(surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
-	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
+	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0 || surrogateName.compare("adaptiveCokrigingAdvanced") == 0){
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
@@ -530,6 +534,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		if(surrogateName.compare("kriging") == 0){printf("Generating Kriging sample with %d low-fidelity samples and %d high-fidelity samples, note low-fi samples will not be used.\n", initialSampleSizeLow, initialSampleSize);}
 		if(surrogateName.compare("cokriging") == 0){printf("Generating Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
 		if(surrogateName.compare("adaptiveCokriging") == 0){printf("Generating Adaptive Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
+		if(surrogateName.compare("adaptiveCokrigingAdvanced") == 0){printf("Generating Adaptive Co-Kriging Advanced sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
 		
 
 		// New way, ignore provided subset in case it is of a non optimise low-fidelity sample
