@@ -78,7 +78,10 @@ library(stringr)
 # 
 # features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
 
-data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetHalfOnly", 1, 2880)
+data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetHalfOnly", 1, 2352)
+
+data <- combineArrayResults("experimentalRunSurrogateModelWithGivenBudgetHalfOnly", 1121, 1456)
+
 features <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
 
 
@@ -386,7 +389,9 @@ chosenMethodsNoChoice <- c("kriging_globalVariance_half",
                            "cokriging_globalVariance_half",
                            "cokriging_globalVarianceWithChoice_half",
                            "adaptiveCokriging_globalVariance_half",
-                           "adaptiveCokriging_globalVarianceWithChoice_half")
+                           "adaptiveCokriging_globalVarianceWithChoice_half",
+                           "adaptiveCokrigingAdvanced_globalVariance_half",
+                           "adaptiveCokrigingAdvanced_globalVarianceWithChoice_half")
  
 # test <- generatePlottableData(data, features, chosenMethodsNoChoice, intervals)
 
@@ -569,11 +574,14 @@ chosenMethodsNoChoice <- c(
                    ,"cokriging_globalVariance_half"
                    # , "cokriging_globalVarianceWithChoice_half"
                    , "adaptiveCokriging_globalVariance_half"
+                   , "adaptiveCokrigingAdvanced_globalVariance_half"
+                   
                    # , "adaptiveCokriging_globalVarianceWithChoice_half"
 )
 
 subsetDataNoChoice <- data[data$method %in% chosenMethodsNoChoice, ]
-subsetDataNoChoice <- subsetDataNoChoice[str_which(subsetDataNoChoice$functionName, "Paciorek"), ]
+# subsetDataNoChoice <- subsetDataNoChoice[str_which(subsetDataNoChoice$functionName, "Paciorek"), ]
+
 
 augmentedNoChoice <- augmentSurrogateModelWithBudgetData(subsetDataNoChoice, features, chosenMethodsNoChoice)
 augmentedNoChoice <- augmentedNoChoice[1:2640,]
@@ -604,6 +612,10 @@ secondTesting <- secondTesting[c(1:3,
 secondTesting <- augmentedNoChoice[testing$kriging_globalVariance_half_corrWilcoxon0.01 >= 0.5 & 
                              testing$cokriging_globalVariance_half_corrWilcoxon0.01 < 0.5 &
                              testing$adaptiveCokriging_globalVariance_half_corrWilcoxon0.01 >= 0.5, ]
+
+secondTesting <- augmentedNoChoice[augmentedNoChoice$kriging_globalVariance_half_corrMean > augmentedNoChoice$adaptiveCokriging_globalVariance_half_corrMean & 
+                                     augmentedNoChoice$cokriging_globalVariance_half_corrMean > augmentedNoChoice$adaptiveCokriging_globalVariance_half_corrMean, ]
+
 secondTesting <- secondTesting[c(1:3,
                      str_which(colnames(secondTesting), "corrMean"))]
 
@@ -612,18 +624,19 @@ testing[4:(ncol(testing)-1)] <- testing$Best - testing[4:(ncol(testing)-1)]
 colSums(testing[4:(ncol(testing)-1)] < 0.01)
 
 
-DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1
-SongToalForretal0.90_B10_Cr0.1
+DisturbanceBasedFunction2-seed1-dists2-centres5-radius0.05-freq5-amp0.1_B20_Cr0.1
 
 testingData <- data
-testingData <- testingData[testingData$functionName == "DisturbanceBasedFunction5-seed1-disth2-height0-radius0.1-freq2-amp1", ]
+testingData <- testingData[testingData$functionName == "DisturbanceBasedFunction2-seed1-dists2-centres5-radius0.05-freq5-amp0.1", ]
 testingData <- testingData[str_which(testingData$method, "_globalVariance_"), ]
-testingData <- testingData[testingData$costRatio == 0.5, ]
-testingData <- testingData[testingData$budget == 10, ]
+testingData <- testingData[testingData$costRatio == 0.1, ]
+testingData <- testingData[testingData$budget == 20, ]
 
-testingData <- testingData[testingData$usedBudget == 9.5, ]
 
-testingData <- testingData[testingData$seed == 4, ]
+
+testingData <- testingData[testingData$usedBudget >= 19, ]
+
+testingData <- testingData[testingData$seed == 9, ]
 testingData <- testingData[testingData$usedBudget >= 29, ]
 
 
@@ -697,5 +710,96 @@ for(method in methods){
 }
 
 
+
+
+
+
+augmentSurrogateModelWithBudgetDataPerSeed <- function(givenData, givenFeatures, givenMethods){
+  split <- strsplit(givenFeatures$instances, ",")
+  instances <- gsub("[(]", "", sapply(split, "[[", 1))
+  order <- match(givenData$functionName, instances)
+  givenData$dimension <- givenFeatures[order, "feature_dimension"]
+  givenData$relativeBudget <- givenData$budget / givenData$dimension
+  givenData$usedRelativeBudget <- givenData$usedBudget / givenData$dimension
+  seeds <- unique(givenData$seed)
+  costRatios <- unique(givenData$costRatio)
+  relativeBudgets <- unique(givenData$relativeBudget)
+  givenData$proportionUsedBudget <- givenData$usedBudget / givenData$budget
+  
+  # Going to remove entries where went past available budget
+  givenData <- givenData[givenData$proportionUsedBudget <= 1, ]
+  
+  
+  index <- 1
+  for(instance in unique(givenData$functionName)){
+    print(instance)
+    for(relativeBudget in relativeBudgets){
+      for(costRatio in costRatios){
+        for(seed in seeds){
+          temp <- givenData[givenData$functionName == instance &
+                              givenData$relativeBudget == relativeBudget &
+                              givenData$costRatio == costRatio &
+                              givenData$seed == seed, ]
+        
+          instanceName <- paste0(instance, "_B", relativeBudget, "_Cr", costRatio, "_S", seed)
+          print(instanceName)
+        
+          if(nrow(temp) == 0){
+            print("Didn't find data!!")
+            print(instanceName)
+            next
+          }
+          # Now want to get the final corr, error and time for each seed and for
+          # each method
+          vals <- c()
+          
+          # Now populate every other entry
+          for(method in givenMethods){
+            temp2 <- temp[temp$method == method, ]
+              
+            if(nrow(temp2) == 0){
+              print("Didn't find data!!")
+              print(method)
+              print(seed)
+              next
+            }
+            
+            # Add a check here to see if all the budget was used up!
+            if(temp2[nrow(temp2), "budget"] - temp2[nrow(temp2), "usedBudget"] > 1){
+              print("Didn't use full budget!!")
+              print(method)
+              print(seed)
+              next
+            }
+            vals <- c(vals, temp2[nrow(temp2), c("modelCorrelation", "modelError")])
+          
+          }
+          
+          names <- c(paste0(givenMethods, "_corr"), paste0(givenMethods, "_err"))
+          
+          tempData <- as.data.frame(matrix(nrow = 1, ncol = 5))
+          colnames(tempData) <- c("instance", "dimension", "relativeBudget", "costRatio", "seed")
+          tempData$instance <- instanceName
+          tempData$dimension <- temp[1, "dimension"]
+          tempData$relativeBudget <- relativeBudget
+          tempData$costRatio <- costRatio
+          tempData$seed <- seed
+          
+          tempData[names] <- vals
+          
+          if(index == 1){
+            processedData <- tempData
+          }else{
+            processedData <- rbind(processedData, tempData)
+          }
+          index <- index + 1
+        }
+      }
+    }
+  }
+  return(processedData)
+}
+
+augmentedNoChoice <- augmentSurrogateModelWithBudgetDataPerSeed(subsetDataNoChoice, features, chosenMethodsNoChoice)
 
 # Save
