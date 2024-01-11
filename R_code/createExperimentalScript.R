@@ -267,8 +267,8 @@ for(i in 1:length(functions)){
   dim <- dims[[i]]
   print(func)
   print(dim)
-  seedsEnd <- 20
-  seedsPerRun <- 20
+  seedsEnd <- 5
+  seedsPerRun <- 5
   # if(dim > 2){seedsPerRun <- 10}
   # if(dim > 5){seedsPerRun <- 5}
   # if(dim >= 10){seedsPerRun <- 1}
@@ -279,6 +279,11 @@ for(i in 1:length(functions)){
           for(doe in c("half")){
             # Kriging cannot have "with choice" as it always samples the high fi source
             if(model == "kriging" & acquisition == "globalVarianceWithChoice"){next}
+            if(acquisition == "globalVarianceWithChoice" & dim == 20){
+              seedsPerRun <- 1
+            }else{
+              seedsPerRun <- 5
+            }
             method <- paste0(model, "_", acquisition, "_", doe)
             index <- index + 1
             runData <- createScriptStructure(c("surrogateModelWithBudget"), c(method), c(func), budget, costRatio, seedsStart = 1, seedsEnd = seedsEnd, seedsPerRun = seedsPerRun)
@@ -293,7 +298,7 @@ for(i in 1:length(functions)){
     }
   }
 }
-write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetHalfOnly.txt", quote = FALSE, row.names = FALSE)
+write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetHalfOnlySmall.txt", quote = FALSE, row.names = FALSE)
 
 
 # write.table(existingRunData, "data/runScripts/experimentalRunSurrogateModelWithGivenBudgetSmallTest.txt", quote = FALSE, row.names = FALSE)
