@@ -883,7 +883,7 @@ void CoKriging::saveMuSigma(){
 	// Note this should work even when the matrix is non invertible, which is a huge plus,
 	// even though this should not happen.
 	int n = cMatrix_.cols();
-	cMatrixInverse_ = cMatrix_.fullPivLu().solve(MatrixXd::Identity(n,n)); 
+	cMatrixInverse_ = cMatrix_.fullPivLu().solve(MatrixXd::Identity(n,n));
 	
 	return;
 }
@@ -997,8 +997,12 @@ tuple<double, MatrixXd, LDLT<MatrixXd>> CoKriging::combinedMuCmatrixCalculator()
 	}
 
 	LDLT<MatrixXd> cMatrixDecomposition = cMatrix.ldlt();
-	MatrixXd mu_top = one.transpose() * cMatrixDecomposition.solve(y);
-	MatrixXd mu_bottom = one.transpose() * cMatrixDecomposition.solve(one);
+	// MatrixXd mu_top = one.transpose() * cMatrixDecomposition.solve(y);
+	// MatrixXd mu_bottom = one.transpose() * cMatrixDecomposition.solve(one);
+
+	MatrixXd mu_top = one.transpose() * cMatrix.fullPivLu().solve(y);
+	MatrixXd mu_bottom = one.transpose() * cMatrix.fullPivLu().solve(one);
+
 	double mu = mu_top(0,0)/ mu_bottom(0,0);
 	return make_tuple(mu, cMatrix, cMatrixDecomposition);
 }

@@ -601,8 +601,9 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		// 	if(printInfo){printf("Train model, skip optimising hyperparameters as have %d high and %d low fidelity samples, and trained %d high fidelity samples ago.\n", (int)model->sampledPoints_.size(), (int)model->sampledPointsLow_.size(), (int)model->sampledPoints_.size() - highFiSamplesAtLastTrain);}
 		// 	model->trainModel(false);
 		}else{
-			if(printInfo){printf("Train model.\n");}
+			if(printInfo){printf("Train model\n");}
 			model->trainModel();
+			if(printInfo){printf("Training complete. Elapsed time since start: %.2f seconds\n", (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);}
 			// highFiSamplesAtLastTrain = (int)model->sampledPoints_.size();
 		}
 		modelVals = model->multipleSurfaceValues(samples);
@@ -633,11 +634,12 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		// Here need to check that adding a high-fidelity sample will not go over budget
 		if((abs(budgetUsed  + 1 - realBudget) > TOL) && ((budgetUsed + 1) > realBudget)){break;}
 		// Get the next sample site and sample there
+		if(printInfo){printf("Choose next point\n");}
 		tuple<VectorXd, double, bool, bool> location = model->findNextSampleSite();
 		if(printInfo){
 			printf("Chosen point ");
 			printPoint(get<0>(location));
-			printf(" with acquisition value function of %.5f\n", get<1>(location));
+			printf(" with acquisition value function of %.5f. Elapsed time since start: %.2f seconds\n", get<1>(location), (clock() - tstart) / (double)(CLOCKS_PER_SEC / 1000) / 1000);
 		}
 
 		model->addSample(get<0>(location), get<2>(location), get<3>(location));
