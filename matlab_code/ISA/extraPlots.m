@@ -1,24 +1,35 @@
 % Start by reading in the necessary data
-%Xbar = readtable("../../data/isaMetadata/surrogateModelWithFixedSampleMetadataRandomOrder.txt");
-folder = 'sampleFeaturesCorrTol0.001';
-
+Xbar = readtable("../../data/isaMetadata/surrogateModelWithFixedSampleMetadataRandomOrder.txt");
+folder = 'CorrTol0.001Bad';
 colormap('parula');
 scriptfcn;
 
+%X = readtable("./" + folder + "/coordinatesChanged.csv");
 X = readtable("./" + folder + "/coordinates.csv");
+
 Yvals = readtable("./" + folder + "/algorithm_raw.csv");
 YbinSVM = readtable("./" + folder + "/algorithm_svm.csv");
 YSVMprediction = readtable("./" + folder + "/portfolio_svm.csv", 'Delimiter',',');
+
+% Changing none prediction to Kriging
+YSVMprediction = table2array(YSVMprediction(:,2));
+YSVMprediction(YSVMprediction == 0) = 1;
+
+
 featVals = readtable("./" + folder + "/feature_process.csv");
 XallFeat = readtable("./" + folder + "/metadataAllFeatures.csv");
-undecided = readtable("./" + folder + "/undecidedInstances.csv");
+%undecided = readtable("./" + folder + "/undecidedInstances.csv");
 rulesSelector = readtable("./" + folder + "/rulesSelector.csv");
 
+% Plot predictions
+clf;
+drawPortfolioSelectionsCustom(table2array(X(:, 2:3)), YSVMprediction, ['Kriging', "Co-Kriging"], "Predicted best algorithm");
+print(gcf,'-dpng',["./" + folder + "/customSelector.png"]);
 
 % Plot rules based selector
 clf;
 set(gcf,'position',[0,0,500,500])
-drawPortfolioSelectionsCustom(table2array(X(:, 2:3)), rulesSelector.("Best_Algorithm"), ["Kriging", "Co-Kriging"], 'Rules-based prediction');
+drawPortfolioSelectionsCustom(table2array(X(table2array(rulesSelector) > 0, 2:3)), table2array(rulesSelector(table2array(rulesSelector) > 0, :)), ["Kriging", "Co-Kriging"], 'Rules-based prediction');
 print(gcf,'-dpng',["./" + folder + "/customSelectorRulesBased.png"]);
 
 % Plot sources giving priority to certain sources
@@ -36,6 +47,10 @@ print(gcf,'-dpng',["./" + folder + "/customDistributionSources.png"]);
 
 
 % Plot desired features
+% clf;
+% drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_mid_nbc_nb_fitness_cor"), "B^r_h");
+% print(gcf,'-dpng',["./" + folder + "/customExtraFeature_fitness_cor.png"]);
+
 clf;
 drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_highFiBudgetRatio"), "B^r_h");
 print(gcf,'-dpng',["./" + folder + "/customExtraFeature_highFiBudgetRatio.png"]);
@@ -61,32 +76,34 @@ drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_LCC_sd"), "LCC
 print(gcf,'-dpng',["./" + folder + "/customFeature_lcc_sd.png"]);
 
 clf;
-drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_LCCrel_0_4"), "LCC^{0.2^{1/d}}_{0.4}");
-print(gcf,'-dpng',["./" + folder + "/customFeature_lcc_rel_4.png"]);
+drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_LCCrel_0_5"), "LCC^{0.2^{1/d}}_{0.5}");
+print(gcf,'-dpng',["./" + folder + "/customFeature_lcc_rel_5.png"]);
 
 clf;
-drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_LCCrel_0_95"), "LCC^{0.2^{1/d}}_{0.95}");
-print(gcf,'-dpng',["./" + folder + "/customFeature_lcc_rel_95.png"]);
-
-clf;
-drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_mid_ela_meta_lin_simple_adj_r2"), "f_h - f_l, R^2_L");
-print(gcf,'-dpng',["./" + folder + "/customFeature_R_linear_simple.png"]);
+drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_LCCrel_0_9"), "LCC^{0.2^{1/d}}_{0.9}");
+print(gcf,'-dpng',["./" + folder + "/customFeature_lcc_rel_9.png"]);
 
 clf;
 drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_mid_ela_meta_lin_w_interact_adj_r2"), "f_h - f_l, R^2_{LI}");
 print(gcf,'-dpng',["./" + folder + "/customFeature_R_linear_interact.png"]);
 
 clf;
+drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_mid_nbc_nb_fitness_cor"), "f_h - f_l, NBC_{fitcorr}");
+print(gcf,'-dpng',["./" + folder + "/customFeature_nbc_fitcorr.png"]);
+
+clf;
 drawScatterNico(table2array(X(:, 2:3)), XallFeat.("feature_sample_RRMSE"), "RRMSE");
 print(gcf,'-dpng',["./" + folder + "/customFeature_RRMSE.png"]);
 
 
-% Plot predictions
-clf;
-drawPortfolioSelectionsCustom(table2array(X(:, 2:3)), table2array(YSVMprediction(:, 2)), ['Kriging', "Co-Kriging"], "Predicted best algorithm")
-print(gcf,'-dpng',["./" + folder + "/customSelector.png"]);
 
-% Plot algorithm performance 
+
+% % Plot instances with no good algorithm
+% clf;
+% drawBinaryPerformanceNico(table2array(X((table2array(Yvals(:,2)) > 0.05) & (table2array(Yvals(:,3)) > 0.05), 2:3)), table2array(Yvals((table2array(Yvals(:,2)) > 0.05) & (table2array(Yvals(:,3)) > 0.05), 2)) <= 0.05, "Kriging");
+% print(gcf,'-dpng',["./" + folder + "/customNoGood.png"]);
+
+% Plot algorithm performance
 clf;
 drawScatterNico(table2array(X(:, 2:3)), table2array(Yvals(:, 2)), "Kriging");
 print(gcf,'-dpng',["./" + folder + "/customKriging.png"]);
@@ -95,17 +112,17 @@ drawScatterNico(table2array(X(:, 2:3)), table2array(Yvals(:, 3)), "Co-Kriging");
 print(gcf,'-dpng',["./" + folder + "/customCoKriging.png"]);
 
 clf;
-drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(Yvals(:, 2)) >= 0.5, "Kriging");
+drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(Yvals(:, 2)) <= 0.05, "Kriging");
 print(gcf,'-dpng',["./" + folder + "/customKrigingBinary.png"]);
 clf;
-drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(Yvals(:, 3)) >= 0.5, "Co-Kriging");
+drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(Yvals(:, 3)) <= 0.05, "Co-Kriging");
 print(gcf,'-dpng',["./" + folder + "/customCoKrigingBinary.png"]);
 
 clf;
-drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(YbinSVM(:, 2)) >= 0.5, "Kriging");
+drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(YbinSVM(:, 2)) == 1, "Kriging");
 print(gcf,'-dpng',["./" + folder + "/customKrigingBinarySVM.png"]);
 clf;
-drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(YbinSVM(:, 3)) >= 0.5, "Co-Kriging");
+drawBinaryPerformanceNico(table2array(X(:, 2:3)), table2array(YbinSVM(:, 3)) == 1, "Co-Kriging");
 print(gcf,'-dpng',["./" + folder + "/customCoKrigingBinarySVM.png"]);
 
 
@@ -113,21 +130,21 @@ print(gcf,'-dpng',["./" + folder + "/customCoKrigingBinarySVM.png"]);
 
 
 
-% Plot critical instances
-labels = readtable("../../data/isaMetadata/instanceFiltering/instanceFilteringSampleFeaturesCorrTol0.001eps0.3.txt");
-labels = table2array(labels);
-% First remove the rows of instances which were precluded
-labels = labels(strcmp(labels(:,1), 'FALSE'), :);
-% Now find visa and dissimlar instances
-Xvisa = X(strcmp(labels(:,2), 'TRUE'), :);
-Xdiss = X(strcmp(labels(:,3), 'TRUE'), :);
-Xvisa = [Xvisa array2table(repelem({'ViSA'}, size(Xvisa,1),1))];
-Xdiss = [Xdiss array2table(repelem({'Dissimilar'}, size(Xdiss,1),1))];
-Xbar = [Xdiss; Xvisa];
-S = categorical(table2array(Xbar(:,4)));
-clf;
-drawCritical(table2array(Xbar(:, 2:3)), S);
-print(gcf,'-dpng',["./" + folder + "/customCriticalInstances.png"]);
+% % Plot critical instances
+% labels = readtable("../../data/isaMetadata/instanceFiltering/instanceFilteringSampleFeaturesCorrTol0.001eps0.3.txt");
+% labels = table2array(labels);
+% % First remove the rows of instances which were precluded
+% labels = labels(strcmp(labels(:,1), 'FALSE'), :);
+% % Now find visa and dissimlar instances
+% Xvisa = X(strcmp(labels(:,2), 'TRUE'), :);
+% Xdiss = X(strcmp(labels(:,3), 'TRUE'), :);
+% Xvisa = [Xvisa array2table(repelem({'ViSA'}, size(Xvisa,1),1))];
+% Xdiss = [Xdiss array2table(repelem({'Dissimilar'}, size(Xdiss,1),1))];
+% Xbar = [Xdiss; Xvisa];
+% S = categorical(table2array(Xbar(:,4)));
+% clf;
+% drawCritical(table2array(Xbar(:, 2:3)), S);
+% print(gcf,'-dpng',["./" + folder + "/customCriticalInstances.png"]);
 
 
 
@@ -200,7 +217,7 @@ for i=1:nsources
     handle(i) = patch([0 0],[0 0], clrs(i,:), 'EdgeColor','none');
 end
 xlabel('z_{1}'); ylabel('z_{2}'); title('Sources');
-legend(handle, sourcelabels, 'Location', 'SouthEast');
+legend(handle, sourcelabels, 'Location', 'NorthEast');
 set(findall(gcf,'-property','FontSize'),'FontSize',12);
 set(findall(gcf,'-property','LineWidth'),'LineWidth',1);
 axis square; axis([lbound(1)-1 ubound(1)+1 lbound(2)-1 ubound(2)+1]);
@@ -237,7 +254,7 @@ for i=1:size(Z,1)
 end
 
 xlabel('z_{1}'); ylabel('z_{2}'); title(titlelabel);
-legend(h(h~=0), lbls(h~=0), 'Location', 'SouthEast');
+legend(h(h~=0), lbls(h~=0), 'Location', 'NorthEast');
 set(findall(gcf,'-property','FontSize'),'FontSize',12);
 set(findall(gcf,'-property','LineWidth'),'LineWidth',1);
 axis square; axis([lbound(1)-1 ubound(1)+1 lbound(2)-1 ubound(2)+1]);
@@ -282,8 +299,8 @@ for i=0:nalgos
     end
 end
 xlabel('z_{1}'); ylabel('z_{2}'); title(titlelabel);
-legend(h(isworthy), algolbls(isworthy), 'Location', 'SouthEast');
-set(findall(gcf,'-property','FontSize'),'FontSize',12);
+legend(h(isworthy), algolbls(isworthy), 'Location', 'NorthEast');
+set(findall(gcf,'-property','FontSize'),'FontSize',11);
 set(findall(gcf,'-property','LineWidth'),'LineWidth',1);
 axis square; axis([lbound(1)-1 ubound(1)+1 lbound(2)-1 ubound(2)+1]);
 

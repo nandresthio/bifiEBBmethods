@@ -133,9 +133,25 @@ end
 eval(strcmd);
 
 ncomb = size(comb,1); %#ok<*NODEF>
+% I don't really like this next sorting, makes it harder to see which
+% feature gets picked for each cluster. Don'd do it for now.
 comb = sort(comb,2);
+% Double permutation to get new results.
+%comb = comb(randperm(ncomb), :);
+
+
+% comb(1, :) = [33  24 17 34 5 30 10 25 32];
+% comb(2, :) = [33  24 17 34 5 41 10 25 32];
+% comb(3, :) = [33  24 17 34 5 42 10 25 32];
+% comb(4, :) = [33  24 17 34 5 30 10 25 21];
+% comb(5, :) = [33  24 17 34 5 30 10 25 22];
+% comb(6, :) = [33  24 17 34 5 30 10 25 23];
+
+
 disp(['-> ' num2str(ncomb) ' valid feature combinations.']);
 
+%disp(comb)
+outputAccuracies = zeros(ncomb, 1);
 maxcomb = 1000;
 % ---------------------------------------------------------------------
 % Determine which combination produces the best separation while using a
@@ -167,6 +183,15 @@ else
         etime = toc;
         disp(['    -> Combination No. ' num2str(i) ' | Elapsed Time: ' num2str(etime,'%.2f\n') ...
               's | Average error : ' num2str(mean(out.ooberr(i,:)))]);
+        disp(comb(i, :))
+        disp(num2str(mean(out.ooberr(i,:))))
+        outputAccuracies(i) = mean(out.ooberr(i,:));
+        resultMatrix = [comb outputAccuracies];
+        disp(resultMatrix(i, :))
+        % Write out the results
+        writematrix(resultMatrix(1:i,:),"results.csv")
+%         comb(i, opts.K + 1) = mean(out.ooberr(i,:));
+        
         tic;
     end
     [~,best] = min(sum(out.ooberr,2));
@@ -218,6 +243,5 @@ end
 etime = toc;
 disp(['    -> Combination No. ' num2str(ind) ' | Elapsed Time: ' num2str(etime,'%.2f\n') ...
       's | Average error : ' num2str(sumerr./size(Ybin,2))]);
-
 end
 % =========================================================================

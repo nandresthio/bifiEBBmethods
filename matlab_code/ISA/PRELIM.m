@@ -42,10 +42,13 @@ else
     end
 end
 disp(msg);
+
+
 % NICO
 % disp('-> NICO: Just kidding, replacing with user defined labels')
-% Ybin = logical(YbinUser);
-
+% disp(Ybin(1:10, :))
+% 
+Ybin = logical(table2array(readtable("./CorrTol0.001Bad/algorithm_binary_user.csv")));
 
 
 

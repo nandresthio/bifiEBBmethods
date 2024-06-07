@@ -65,6 +65,8 @@ isfeat = strncmpi(varlabels,'feature_',8);
 isalgo = strncmpi(varlabels,'algo_',5);
 issource = strcmpi(varlabels,'source');
 
+
+
 model.data.instlabels = Xbar{:,isname};
 if isnumeric(model.data.instlabels)
     model.data.instlabels = num2cell(model.data.instlabels);

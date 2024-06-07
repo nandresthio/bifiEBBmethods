@@ -279,7 +279,10 @@ disp('========================================================================='
 disp('-> Summoning PYTHIA to train the prediction models.');
 disp('=========================================================================');
 % NICO
-model.pythia = PYTHIA(model.pilot.Z, model.data.Yraw, model.data.Ybin, model.data.Ybest, model.data.algolabels, opts.pythia);
+%model.pythia = PYTHIA(model.pilot.Z, model.data.Yraw, model.data.Ybin, model.data.Ybest, model.data.algolabels, opts.pythia);
+% Run pythia with x's insteaf of z's (for the reviewers)
+model.pythia = PYTHIA(model.data.X, model.data.Yraw, model.data.Ybin, model.data.Ybest, model.data.algolabels, opts.pythia);
+
 % -------------------------------------------------------------------------
 % Calculating the algorithm footprints.
 disp('=========================================================================');
