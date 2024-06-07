@@ -36,13 +36,6 @@
 #include "aux_functions.hpp"
 #include "functions.hpp"
 #include "sample_generator.hpp"
-// extern "C" {
-// 	#include "cmaes/src/boundary_transformation.h"
-// 	#include "cmaes/src/cmaes.h"
-// 	#include "cmaes/src/cmaes_interface.h"
-// }
-
-
 
 
 // Aomeba solver implementation (also known as Nelder–Mead method, see https://en.wikipedia.org/wiki/Nelder%E2%80%93Mead_method)
@@ -177,24 +170,5 @@ class RandomHeavyTuneSolver : public AuxSolver{
 
 	int numSphereARS_;						// Number of spheres when running ARS solver
 };
-
-// BELLOW IS A LINKING OF CMAES CODE, NOT CURRENTLY IN USE
-
-// class CMAESsolver : public AuxSolver{
-// 	public:
-
-// 	CMAESsolver(Function* function, bool min = true, int randomSeed = 0, bool printInfo = false, bool useTieBreaker = false, string tieBreakerFlag = "", int finishWithLocalSearch = 0, int additionalEvaluationsInLocalSearch = 1000);
-
-// 	CMAESsolver(Function* function, int maxEval, bool min = true, int randomSeed = 0, bool printInfo = false, bool useTieBreaker = false, string tieBreakerFlag = "", int finishWithLocalSearch = 0, int additionalEvaluationsInLocalSearch = 1000);
-
-// 	virtual ~CMAESsolver() override;
-
-// 	// Main method which finds best possible point given budget; returns best point found.
-// 	virtual VectorXd optimise() override;
-
-	
-// };
-
-
 
 #endif

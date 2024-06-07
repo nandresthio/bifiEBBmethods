@@ -95,7 +95,7 @@ public:
 
 	// Function which takes a gathered sample assumed to come from two sources f_h and f_l, and internally saves them inside the 
 	// surrogate model instance. The sets "points" and "pointsLow" are the locations at which f_h and f_l have been sampled, respectively.
-	// The sets "observations" and "observvationsLow" are the objective function values of f_h and f_l, respectively. Note that the
+	// The sets "observations" and "observationsLow" are the objective function values of f_h and f_l, respectively. Note that the
 	// default behaviour is to scale everything internally, that is the samples to lie in [0,1]^d, and the observations to lie
 	// within [0,1]. In order to stop this scaling, set functionScaling to false when initialising the surrogate model.
 	virtual void saveSample(vector<VectorXd> points, vector<VectorXd> pointsLow, vector<double> observations, vector<double> observationsLow);
@@ -288,9 +288,6 @@ class Kriging : public SurrogateModel{
 
 
 
-
-
-
 // Implementation of a CoKriging surrogate model of a two-source function, which is normally a high fidelity expensive black box function,
 // and a cheaper, low fidelity but also expensive black box function. Once an instance of this class has been trained via a call to 
 // trainModel, it can be queried for surface value and variance (i.e. uncertainty) in the sample space.
@@ -329,40 +326,54 @@ class CoKriging: public Kriging{
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
 
+	// Function which populates the vector c(x) as defined in the appendices for x = point
 	VectorXd cVector(VectorXd &point);
 
+	// Function which populates the vector c_l(x) as defined in the appendices for x = point
 	VectorXd cLowVector(VectorXd &point);
 
+	// Function which populates the vector c_b(x) as defined in the appendices for x = point
 	MatrixXd cBothMatrix(VectorXd &x);
 
+	// Function which returns the value W^1(x_1, x_2) as defined in Chapter 5.1.3.2 given in the
+	// repo for x_1 = point1, x_2 = point2
 	double w1product(VectorXd &point1, VectorXd &point2);
 
+	// Function which returns the value W^2(x_1, x_2) as defined in Chapter 5.1.3.2 given in the
+	// repo for x_1 = point1, x_2 = point2
 	double w2product(VectorXd &point1, VectorXd &point2);
 
+	// Function which returns the value W^3(x_1, x_2) as defined in Chapter 5.1.3.2 given in the
+	// repo for x_1 = point1, x_2 = point2
 	double w3product(VectorXd &point1, VectorXd &point2);
 
+	// Function which populates the matrix W^cokrig as defined in Chapter 5.1.3.2 given the saved
+	// sample
 	virtual void setWmatrix() override;
 
+	// Function which evaluates Delta^l_{x} IMSPE as defined in Chapter 5.1.3.2
 	double globalVarianceReductionLowFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
+	// Function which evaluates Delta^h_{x} IMSPE as defined in Chapter 5.1.3.2
 	double globalVarianceReductionHighFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
+	// Function which evaluates Delta^b_{x} IMSPE as defined in Chapter 5.1.3.2
 	double globalVarianceReductionBothFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
-	double globalVarianceReductionApproximationLowFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+	// double globalVarianceReductionApproximationLowFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
-	double globalVarianceReductionApproximationHighFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+	// double globalVarianceReductionApproximationHighFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
-	double globalVarianceReductionApproximationBothFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
+	// double globalVarianceReductionApproximationBothFiSample(VectorXd &x, bool pointIsScaled = false, bool unscaleOutput = true);
 
 	// Returns the evaluation of the acquisition function at a particular location. It is assumed the point is unscaled i.e. it lies in the domain
-	// of the specified biFunction. Internally this flag might be modified to account for internal scaling. Note this function should not
-	// be called at this level, and instead should be implemented in each of the children classes.
+	// of the specified biFunction. Internally this flag might be modified to account for internal scaling.
 	virtual double evaluateAcquisitionFunction(VectorXd x) override;
 
+	// Function which saves a string indicating to the model which acquisition function should be used.
 	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
 
-	// Finds the location of the next sampling site, based on an already specified acquisition function
+	// Finds the location of the next sampling site, based on an already specified acquisition function.
 	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
 
 	// Calculates the log likelihood function of the intermediate (i.e. error) model using the stored hyperparameters.
@@ -424,10 +435,12 @@ class AdaptiveCoKriging: public CoKriging{
 
 	~AdaptiveCoKriging() override;
 
-
+	// Stores the cost ratio in the surrogate model; used for comparison of adaptive function.
 	void setCostRatio(double costRatio) override;
 
-	// Function which assesses the low fi function
+	// Function which assesses the low fi function i.e. checks its quality to decide whether the 
+	// model should rely on it. The rules followed are those derived in the provided thesis in the repo
+	// in Chapter 5.1.2
 	void assessLowFiFunction();
 
 	// Override function which also saves data to the low fi krig model
@@ -441,11 +454,13 @@ class AdaptiveCoKriging: public CoKriging{
 	// Calculates the surrogate surface value and variance at a particular point
 	virtual tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
 
+	// Function which saves a string indicating to the model which acquisition function should be used.
 	virtual void setAcquisitionFunction(string chosenAcquisiton) override;
 
 	// Finds the location of the next sampling site, based on an already specified acquisition function
 	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
 
+	// Function used to train a simple regression model by least squares regression.
 	class leastSquaresFunction : public Function{
 	public:
 
@@ -464,100 +479,11 @@ class AdaptiveCoKriging: public CoKriging{
 	CoKriging* cokrigingModel_;				// Kriging model trained on high and low fidelity data
 	bool lowFiDataIsUseful_;				// Bool which stated whether the low fi data should be used
 
-	bool advanced_;							// Aditional flag which only does not switch usefulness
+	bool advanced_;							// Aditional flag which only does switch usefulness
 											// based on sample size
 
 };
 
-
-
-
-// CODE IN DEVELOPMENT BELOW
-
-
-// // Implementation of CoKriging when the low fidelity function is "cheap", i.e. there is no cost to sample it and is therefore sampled freely.
-// class CoKrigingCheap: public Kriging{
-// 	public:
-
-// 	CoKrigingCheap(BiFidelityFunction* biFunction, AuxSolver* auxSolver, int highFiSampleBudget, char mode = 's', int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
-
-// 	~CoKrigingCheap() override;
-
-// 	void trainHyperparameters() override;
-
-// 	void saveMuSigma() override;
-
-// 	tuple<double, double, MatrixXd, LDLT<MatrixXd>> intermediateMuSigmaCalculator();
-
-// 	double muCalculator(int nL = 10000);
-
-// 	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
-
-// 	double intermediateConcentratedLikelihoodFunction();
-	
-// 	class IntermediateConcentratedLikelihoodFunction : public Function{
-// 	public:
-
-// 		IntermediateConcentratedLikelihoodFunction(int d, vector<double> &lowerBound, vector<double> &upperBound, CoKrigingCheap* cokrigingCheapModel);
-
-// 		~IntermediateConcentratedLikelihoodFunction();
-
-// 		virtual double evaluate(VectorXd &point) override;
-
-// 		virtual int betterPoint(VectorXd &point1, double val1, VectorXd &point2, double val2, string flag = "") override; 
-
-// 		CoKrigingCheap* cokrigingCheapModel_;
-// 	};
-
-// 	BiFidelityFunction* biFunction_;		// Two-source black box function for which a surrogate model is built.
-// 	int highFiSampleBudget_;				// Number of samples of the high fidelity source used when training the model.
-// 	vector<double> thetaB_;					// Intermediate set of first hyperparameters.
-// 	vector<double> pBVector_;				// Intermediate set of second hyperparameters.
-// 	double rho_;							// Multiplier of low fidelity model, also a hyperparameter.
-	
-// 	double sigmaB_;							// Sigma of the intermediate model.
-// 	double muIntermediate_;					// Mu of the intermediate model.
-// 	double mu_;
-// 	MatrixXd bMatrix_;						
-// 	LDLT<MatrixXd> bMatrixDecomposition_;	
-
-// 	char mode_;
-
-// };
-
-
-
-// class AdaptiveCoKriging: public CoKriging{
-// 	public:
-// 	AdaptiveCoKriging(BiFidelityFunction* biFunction, string strategy, double pFactor, double rFactor, AuxSolver* auxSolver, int highFiSampleBudget, int lowFiSampleBudget, int randomSeed = 0, bool printInfo = false, bool functionScaling = true);
-
-// 	~AdaptiveCoKriging() override;
-
-// 	void saveSample(vector<VectorXd> sample, vector<double> sampleVals, vector<VectorXd> sampleLow, vector<double> sampleValsLow) override;
-
-// 	virtual void sampleAtLocation(VectorXd point) override;
-
-// 	void chooseReliableLowFidelityData(double p = 0.5, double r = 0.2);
-
-// 	void trainModel() override;
-
-// 	tuple<double, double> meanVarianceCalculator(VectorXd &x) override;
-
-		
-// 	string strategy_;
-// 	double pFactor_;
-// 	double rFactor_;
-
-// 	Kriging* highFiKriging_;
-
-// 	vector<VectorXd> sampledPointsLow_;				// Points at which the function was sampled, which will be used to train the model.
-// 	vector<double> sampledPointsValuesLow_;			// Function value at the sampled points.
-
-// 	vector<VectorXd> usedSampledPointsLow_;			// Points which have been chosen as "trustworthy" by the selection process to train a low kriging model.
-// 	vector<double> usedSampledPointsValuesLow_; 	// Low fi values at the chosen points.
-
-// 	bool onlyUseHighFiData_;						// Bool on whether all low fi data has been discarded.
-// };
 
 
 #endif

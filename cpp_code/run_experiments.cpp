@@ -73,7 +73,7 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 				if(printInfo){printf("\n");}
 			}
 		}
-	}else if(problemType.compare("surrogateModelWithBudget") == 0 || problemType.compare("optimisationWithBudget") == 0){
+	}else if(problemType.compare("surrogateModelWithBudget") == 0){
 		stringstream ss2(problem);
 		string token2;
 		getline(ss2, token2, ',');
@@ -95,8 +95,13 @@ void processExperiment(string outputFilename, string instructionLine, bool print
 			assessSurrogateModelWithBudget(outputFilename, problemType, functionName, budget, costRatio, seed, method);
 			if(printInfo){printf("Done with seed %d\n\n", seed);}
 		}
+	
+	}else if(problemType.compare("optimisationWithBudget") == 0){
+		printf("Option optimisationWithBudget has not been implemented in this repository! Stopping now...\n");
+		exit(0);
+
 	}else{
-		printf("Problem, do not recognise problem type in run file! Must be one of sampleCreation, surrogateModelWithFixedSample, surrogateModelWithBudget or optimisationWithBudget. Stopping now...\n");
+		printf("Problem, do not recognise problem type in run file! Must be one of sampleCreation, surrogateModelWithFixedSample or surrogateModelWithBudget. Stopping now...\n");
 		exit(0);
 	}
 }
@@ -325,7 +330,8 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
-	}else if(name.compare("adaptiveCokriging") == 0 || name.compare("adaptiveCokrigingAdvanced") == 0){
+	// }else if(name.compare("adaptiveCokriging") == 0 || name.compare("adaptiveCokrigingAdvanced") == 0){
+	else if(name.compare("adaptiveCokriging") == 0){
 		AuxSolver* auxSolverKrig = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		Kriging* modelKrig = new Kriging(function, auxSolverKrig, seed, printInfo, true);
 
@@ -333,11 +339,13 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		CoKriging* modelCoKrig = new CoKriging(function, auxSolverCoKrig, seed, printInfo, true);
 
 		AuxSolver* auxSolver = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
-		if(name.compare("adaptiveCokriging") == 0){
-			model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, false, seed, printInfo, true);
-		}else{
-			model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, true, seed, printInfo, true);
-		}
+		model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, true, seed, printInfo, true);
+
+		// if(name.compare("adaptiveCokriging") == 0){
+		// 	model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, false, seed, printInfo, true);
+		// }else{
+		// 	model = new AdaptiveCoKriging(function, auxSolver, modelKrig, modelCoKrig, true, seed, printInfo, true);
+		// }
 	
 	}else{
 		printf("Problem: Could not match method name! Specified %s. Stopping here...\n", name.c_str());							
@@ -470,30 +478,6 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	int initialSampleSizeLow;
 
 	// Going to go for the same generating procedure for Kriging to compare what they do with the same budget
-	// if(surrogateName.compare("kriging") == 0){
-	// 	if(designOfExperimentsApproach.compare("small") == 0){
-	// 		initialSampleSize =	function->d_ + 1;
-	// 	}else if(designOfExperimentsApproach.compare("half") == 0){
-	// 		initialSampleSize =	ceil(realBudget / 2.0);
-	// 	}else if(designOfExperimentsApproach.compare("all") == 0){
-	// 		initialSampleSize = realBudget;
-	// 	}else{
-	// 		printf("Undefined behaviour for design of experiments specified %s! Stopping now...\n", designOfExperimentsApproach.c_str());
-	// 		exit(0);
-	// 	}
-	// 	printf("Generating Kriging sample with %d high-fidelity samples.\n", initialSampleSize);
-	// 	initialSampleSizeLow = 0;
-	// 	pair<vector<VectorXd>, vector<VectorXd> > points = readInOrGenerateInitialSample(function, initialSampleSize, initialSampleSizeLow, seed, printInfo);
-	// 	sampledPoints = points.first;
-	// 	// If was generated, I actually am not happy with this (not locally optimal), so optimise myself
-	// 	// If read in, this should be a fast call which finds no further optimisation
-	// 	model->scalePoints(sampledPoints);
-	// 	// Allowing a maximum of 1000 improvements in order to keep the running time manageable
-	// 	sampleGenerator->morrisMitchellLocalOptimal(sampledPoints, 1000);
-	// 	model->unscalePoints(sampledPoints);
-	// 	sampledPointsValues = function->evaluateMany(sampledPoints);
-
-	// }else if(surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0){
 	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0 || surrogateName.compare("adaptiveCokrigingAdvanced") == 0){
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
@@ -550,6 +534,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		sampledPointsValuesLow = function->evaluateManyLow(sampledPointsLow);
 	}else{
 		printf("Undefined behaviour for surrogate model specified %s! Stopping now...\n", surrogateName.c_str());
+		return;
 	}
 	delete sampleGenerator;
 

@@ -48,8 +48,13 @@
 //									The problem specification should follow the same format as for sampleCreation. The available 
 //									techniques currently are kriging and cokriging. The performance is measured both in terms of
 //									model error and model correlation with f_h, both of which are stored in data/clusterResults
-// - surrogateModelWithBudget: To be implemented.
-// - optimisationWithBudget: To be implemented.
+//
+// - surrogateModelWithBudget: 	Similar to the problem above, assesses the accuracy of a surrogate model approach given 
+//								an overall budget and cost ratio. As detailed in the thesis, the decisions to be made include
+//								how to split the overall budget between an initial sample and further sampling, the aquisition
+//								function and the choice of model.
+//
+// - optimisationWithBudget: Natural follow up to the above but not implemented here.
 void processExperiment(string outputFilename, string instructionLine, bool printInfo = true);
 
 // Function which implementes the sampleCreation detailed above. Generates a sample of size lowFiBudget and a subset of size highFiBudget
@@ -59,7 +64,7 @@ void generateAndSaveSample(string outputFilename, string problemType, string fun
 // Either reads in or generates initial sample. If the sample cannot be read in from the file, a random LHS sample is generated instead.
 pair<vector<VectorXd>, vector<VectorXd> > readInOrGenerateInitialSample(BiFidelityFunction* function, int highFiBudget, int lowFiBudget, int seed, bool printInfo = true);
 
-// Given a name, this function initialises a child of the surrogateModel class. Currently accepts kriging and cokriging as the
+// Given a name, this function initialises a child of the surrogateModel class. Currently accepts kriging, cokriging and Rules-based Co-Kriging as the
 // options for a surrogate model. 
 SurrogateModel* processModelName(string name, BiFidelityFunction* function, int seed, bool printInfo = true, bool printSolverInfo = false);
 
@@ -69,7 +74,14 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 
 // Function which implementes the surrogateModelWithBudget problem type. Initialises a bifidelity function and a surrogate model
 // with a specified acquisition function, reads in (or generates if the file is non-existence) a sampling plan, and iteratively
-// samples the bifidelity function until the whole budget has been used up.
+// samples the bifidelity function until the whole budget has been used up.\
+// The options for the initial use of the budget include "small" (n_h = d + 1, n_l = 2(d+1)), "medium" (half the budget is used in
+// the initial sample with n_l = 2 * n_h), and "all" (the whole budget is used in the initial spread out samping plan, with n_l = 2 * n_h).
+// The options for the surrogate model include Kriging, Co-Kriging and Rules-based Co-Kriging (here specified as adaptiveCoKriging).
+// The options for the acquisition function include max uncertainty ("variance"), max global uncertainty reduction ("globalVariance"),
+// and a max global uncertainty reduction which compares potentially sampling the high- and low-fidelity sources and chooses only one
+// as detailed in the thesis ("globalVarianceWithChoice").
+// An example call for method is "adaptiveCokriging_globalVarianceWithChoice_half"; for further examples consult the folder data/runScripts
 void assessSurrogateModelWithBudget(string outputFilename, string problemType, string functionName, int budget, double costRatio, int seed, string method, bool printInfo = true);
 
 
