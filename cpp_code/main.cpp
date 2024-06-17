@@ -40,7 +40,7 @@ int main(int argc, char *argv[]){
 		printf("\t-NUMROWS: (Optional) Number of experiments to run, default is 1.\n");
 		printf("\t-ROWADD: (Optional) Addition to ROWSTART, needed when running experiments in the SPARTAN cluster.\n\n");
 		printf("The experiments in the specified which will run will go from line ROWADD + (ROWSTART - 1) * NUMROWS + 1 to line ROWADD + ROWSTART * NUMROWS\n\n");
-		printf("Example run: main sampleCreationRun 1 10\n\n");
+		printf("Example run: cpp_code\\main sampleCreationRun 1 10\n\n");
 
 
 		string functionName = "ToalBranin0.10";
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]){
 		// This line creates a bifidelity function class which can be queried for both high and low fidelity function values
 		BiFidelityFunction* function = processFunctionName(functionName);
 		
-		// This line creates a surrogate model based on the function, currently the strings "kriging" and "cokriging" are supported
+		// This line creates a surrogate model based on the function, currently the strings "kriging", "cokriging" and "rulesCokriging" are supported
 		// Setting a non-zero seed allows reproducible results.
 		SurrogateModel* model = processModelName(modelName, function, seed);
 

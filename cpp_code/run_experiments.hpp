@@ -74,7 +74,7 @@ void assessSurrogateModelWithFixedSample(string outputFilename, string problemTy
 
 // Function which implementes the surrogateModelWithBudget problem type. Initialises a bifidelity function and a surrogate model
 // with a specified acquisition function, reads in (or generates if the file is non-existence) a sampling plan, and iteratively
-// samples the bifidelity function until the whole budget has been used up.\
+// samples the bifidelity function until the whole budget has been used up.
 // The options for the initial use of the budget include "small" (n_h = d + 1, n_l = 2(d+1)), "medium" (half the budget is used in
 // the initial sample with n_l = 2 * n_h), and "all" (the whole budget is used in the initial spread out samping plan, with n_l = 2 * n_h).
 // The options for the surrogate model include Kriging, Co-Kriging and Rules-based Co-Kriging (here specified as adaptiveCoKriging).

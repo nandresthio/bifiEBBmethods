@@ -331,7 +331,7 @@ SurrogateModel* processModelName(string name, BiFidelityFunction* function, int 
 		model = new CoKriging(function, auxSolver, seed, printInfo, true);
 	
 	// }else if(name.compare("adaptiveCokriging") == 0 || name.compare("adaptiveCokrigingAdvanced") == 0){
-	else if(name.compare("adaptiveCokriging") == 0){
+	}else if(name.compare("rulesCokriging") == 0){
 		AuxSolver* auxSolverKrig = new RandomHeavyTuneSolver(function, false, seed, printSolverInfo);
 		Kriging* modelKrig = new Kriging(function, auxSolverKrig, seed, printInfo, true);
 
@@ -478,7 +478,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 	int initialSampleSizeLow;
 
 	// Going to go for the same generating procedure for Kriging to compare what they do with the same budget
-	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("adaptiveCokriging") == 0 || surrogateName.compare("adaptiveCokrigingAdvanced") == 0){
+	if(surrogateName.compare("kriging") == 0 || surrogateName.compare("cokriging") == 0 || surrogateName.compare("rulesCokriging") == 0){
 		int totalInitialBudget;
 		if(designOfExperimentsApproach.compare("small") == 0){
 			initialSampleSize =	function->d_ + 1;
