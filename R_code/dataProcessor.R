@@ -95,9 +95,12 @@ condenseData <- function(data, algorithms){
   
   featNames <- colnames(data[, str_which(colnames(data), "feature_")])
   colnames <- c("instances", "Source", 
+                "cohenCorr",
                 paste0(algorithms, "_corrWilcoxon0"), paste0(algorithms, "_corrWilcoxon0.001"), paste0(algorithms, "_corrWilcoxon0.0025"), paste0(algorithms, "_corrWilcoxon0.005"), paste0(algorithms, "_corrWilcoxon0.01"),
+                paste0(algorithms, "_corrWilcoxon0Bad"), paste0(algorithms, "_corrWilcoxon0.001Bad"), paste0(algorithms, "_corrWilcoxon0.0025Bad"), paste0(algorithms, "_corrWilcoxon0.005Bad"), paste0(algorithms, "_corrWilcoxon0.01Bad"),
                 paste0(algorithms, "_corrMean"), paste0(algorithms, "_corrMedian"),
                 paste0(algorithms, "_errorWilcoxon0"), paste0(algorithms, "_errorWilcoxon0.001"), paste0(algorithms, "_errorWilcoxon0.0025"), paste0(algorithms, "_errorWilcoxon0.005"), paste0(algorithms, "_errorWilcoxon0.01"),
+                paste0(algorithms, "_errorWilcoxon0Bad"), paste0(algorithms, "_errorWilcoxon0.001Bad"), paste0(algorithms, "_errorWilcoxon0.0025Bad"), paste0(algorithms, "_errorWilcoxon0.005Bad"), paste0(algorithms, "_errorWilcoxon0.01Bad"),
                 paste0(algorithms, "_errorMean"), paste0(algorithms, "_errorMedian"), featNames)
   output <- setNames(data.frame(matrix(ncol = length(colnames), nrow = 0)), colnames)
   row <- 0
@@ -114,6 +117,16 @@ condenseData <- function(data, algorithms){
     for(algorithm in algorithms){
       output[row, c(paste0(algorithm, "_corrMean"), paste0(algorithm, "_corrMedian"), paste0(algorithm, "_errorMean"), paste0(algorithm, "_errorMedian"))] <- 
         c(mean(tempData[, paste0(algorithm, "_modelCorrelation")]), median(tempData[, paste0(algorithm, "_modelCorrelation")]), mean(tempData[, paste0(algorithm, "_modelError")]), median(tempData[, paste0(algorithm, "_modelError")]))
+    }
+    # Formula for Cohen's
+    meanKrig <- mean(tempData$kriging_modelCorrelation)
+    meanCoKrig <- mean(tempData$cokriging_modelCorrelation)
+    varKrig <- var(tempData$kriging_modelCorrelation)
+    varCoKrig <- var(tempData$cokriging_modelCorrelation)
+    if(varKrig == 0 & varCoKrig == 0){
+      output[row, "cohenCorr"] <- 0
+    }else{
+      output[row, "cohenCorr"] <- (meanKrig - meanCoKrig) / sqrt((varKrig^2 + varCoKrig^2) / 2)
     }
     
     hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, paired = TRUE, alternative = "less")
@@ -142,30 +155,83 @@ condenseData <- function(data, algorithms){
     output[row, "cokriging_corrWilcoxon0.01"] <- hypSame$p.value
     
     
+    # Here the null hypothesis is that the method is bad
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, paired = TRUE, alternative = "g")
+    output[row, "kriging_corrWilcoxon0Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, paired = TRUE, alternative = "g")
+    output[row, "cokriging_corrWilcoxon0Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.001, paired = TRUE, alternative = "g")
+    output[row, "kriging_corrWilcoxon0.001Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.001, paired = TRUE, alternative = "g")
+    output[row, "cokriging_corrWilcoxon0.001Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.0025, paired = TRUE, alternative = "g")
+    output[row, "kriging_corrWilcoxon0.0025Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.0025, paired = TRUE, alternative = "g")
+    output[row, "cokriging_corrWilcoxon0.0025Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.005, paired = TRUE, alternative = "g")
+    output[row, "kriging_corrWilcoxon0.005Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.005, paired = TRUE, alternative = "g")
+    output[row, "cokriging_corrWilcoxon0.005Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelCorrelation, tempData$cokriging_modelCorrelation, mu = -0.01, paired = TRUE, alternative = "g")
+    output[row, "kriging_corrWilcoxon0.01Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelCorrelation, tempData$kriging_modelCorrelation, mu = -0.01, paired = TRUE, alternative = "g")
+    output[row, "cokriging_corrWilcoxon0.01Bad"] <- hypSame$p.value
+    
+    
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, paired = TRUE, alternative = "g")
     output[row, "kriging_errorWilcoxon0"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0"] <- hypSame$p.value
-    
+
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.001, paired = TRUE, alternative = "g")
     output[row, "kriging_errorWilcoxon0.001"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.001, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0.001"] <- hypSame$p.value
-    
+
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.0025, paired = TRUE, alternative = "g")
     output[row, "kriging_errorWilcoxon0.0025"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.0025, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0.0025"] <- hypSame$p.value
-    
+
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.005, paired = TRUE, alternative = "g")
     output[row, "kriging_errorWilcoxon0.005"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.005, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0.005"] <- hypSame$p.value
-    
+
     hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.01, paired = TRUE, alternative = "g")
     output[row, "kriging_errorWilcoxon0.01"] <- hypSame$p.value
     hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.01, paired = TRUE, alternative = "g")
     output[row, "cokriging_errorWilcoxon0.01"] <- hypSame$p.value
+    
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, paired = TRUE, alternative = "l")
+    output[row, "kriging_errorWilcoxon0Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, paired = TRUE, alternative = "l")
+    output[row, "cokriging_errorWilcoxon0Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.001, paired = TRUE, alternative = "l")
+    output[row, "kriging_errorWilcoxon0.001Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.001, paired = TRUE, alternative = "l")
+    output[row, "cokriging_errorWilcoxon0.001Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.0025, paired = TRUE, alternative = "l")
+    output[row, "kriging_errorWilcoxon0.0025Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.0025, paired = TRUE, alternative = "l")
+    output[row, "cokriging_errorWilcoxon0.0025Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.005, paired = TRUE, alternative = "l")
+    output[row, "kriging_errorWilcoxon0.005Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.005, paired = TRUE, alternative = "l")
+    output[row, "cokriging_errorWilcoxon0.005Bad"] <- hypSame$p.value
+    
+    hypSame <- wilcox.test(tempData$kriging_modelError, tempData$cokriging_modelError, mu = 0.01, paired = TRUE, alternative = "l")
+    output[row, "kriging_errorWilcoxon0.01Bad"] <- hypSame$p.value
+    hypSame <- wilcox.test(tempData$cokriging_modelError, tempData$kriging_modelError, mu = 0.01, paired = TRUE, alternative = "l")
+    output[row, "cokriging_errorWilcoxon0.01Bad"] <- hypSame$p.value
   }
   return(output)
 }
