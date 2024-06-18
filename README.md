@@ -103,7 +103,9 @@ For the paper [Characterising Harmful Data Sources When Constructing Multi-fidel
 For the paper [TO BE DEFINED](link.com) the processing of results is simply aggregated by budget and FINISH ONCE THIS IS FINALISED.
 
 
+## Acknowledgements
 
+This research was supported by the Australian Research Council under grant number IC200100009 for the ARC Training Centre in Optimisation Technologies, Integrated Methodologies and Applications (OPTIMA). Funding was also received through the Australian Government Research Training Program Scholarship from The University of Melbourne. This research was also supported by The University of Melbourne’s Research Computing Services and the Petascale Campus Initiative.
 
 
 
