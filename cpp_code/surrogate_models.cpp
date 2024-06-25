@@ -309,7 +309,8 @@ void Kriging::trainHyperparameters(){
 	for(int i = 0; i < d; i++){
 		if(functionScaling_){
 			lowerBound[i] = -3;
-			upperBound[i] = 3;
+			// Increased bounds to 5 as it is possible to have so much data that for smaller values this is undefined
+			upperBound[i] = 5;
 		}else{
 			lowerBound[i] = -10;
 			upperBound[i] = 3;
