@@ -297,6 +297,21 @@ void Kriging::trainModel(bool forcedOptimiseHyperparameters){
 	
 	saveMuSigma();	
 	trainedModel_ = true;
+	
+	// It is possible that the predictions are now undefined,
+	// if the hyperparameters where not optimised.
+	// This can happen if there are lots of points.
+	// Check that a random prediction can be given; if not call the function again
+	// and force the training of hyperparameters
+	// Get a random point
+	VectorXd point = (sampleGenerator_->randomSample(1))[0];
+	double val = surfaceValue(point);
+	if(isnan(val)){
+		if(printInfo_){printf("Skipped hyperparameter optimisation but now predictions give NaN. Forcing retuning of hyperparameters.\n");}
+		trainModel(true);
+	}
+	return;
+	
 	return;
 }
 
@@ -806,6 +821,19 @@ void CoKriging::trainModel(bool forcedOptimiseHyperparameters){
 	}
 
 	saveMuSigma();	
+
+	// It is possible that the predictions are now undefined,
+	// if the hyperparameters where not optimised.
+	// This can happen if there are lots of points.
+	// Check that a random prediction can be given; if not call the function again
+	// and force the training of hyperparameters
+	// Get a random point
+	VectorXd point = (sampleGenerator_->randomSample(1))[0];
+	double val = surfaceValue(point);
+	if(isnan(val)){
+		if(printInfo_){printf("Skipped hyperparameter optimisation but now predictions give NaN. Forcing retuning of hyperparameters.\n");}
+		trainModel(true);
+	}
 	return;
 }
 
