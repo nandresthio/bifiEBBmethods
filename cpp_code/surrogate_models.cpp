@@ -1770,8 +1770,8 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 		differences.push_back(highFiValues[i] - lowFiValues[i]);
 	}
 
-	if(printInfo_){printf("Assessing low fidelity function. Calculate Adjusted R^2 for a linear model\n");}
-	leastSquaresFunction* function = new leastSquaresFunction(d + 1, locations, differences);
+	if(printInfo_){printf("Assessing low fidelity function. Calculate Adjusted R^2 for a linear model with interactions.\n");}
+	leastSquaresFunction* function = new leastSquaresFunction(d, locations, differences);
 	auxSolver_->updateProblem(function, true);
 	VectorXd coefficients = auxSolver_->optimise();
 	// Now want the mean, sum of squares, and sum of residuals
@@ -1788,21 +1788,9 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	for(int i = 0; i < n; i++){
 		ssReg += pow(differences[i] - mean, 2);
 	}
-
-	// for(int i = 0; i < n; i++){
-	// 	// Get the prediction
-	// 	double prediction = coefficients[0];
-	// 	for(int j = 0; j < d; j++){
-	// 		prediction += coefficients[j + 1] * locations[i](j);
-	// 	}
-	// 	printf("Prediction %.4f vs real %.4f\n", prediction, differences[i]);
-	// 	// ssReg += pow(prediction - mean, 2);
-	// }
 	double ssRes = function->evaluate(coefficients);
 
 	// printf("Got ssReg %.20f and ssRes %.20f\n", ssReg, ssRes);
-	// double ssTot = ssRes + ssReg;
-	// double adjustedR2 = 1 - (ssRes / ssTot) / (((double)n - d - 1) / ((double)n - 1));
 	double adjustedR2;
 	// If have very little data the model should be able to fit it exactly
 	if(n <= d + 1){adjustedR2 = 1;}
@@ -1817,25 +1805,25 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	unscalePoints(locations);
 	unscaleObservations(highFiValues);
 	unscaleObservations(lowFiValues);
-	pair<vector<double>, vector<double> > lccs = calculateLocalCorrelations(biFunction_, 0.2, {0.4, 0.95}, locations, highFiValues, lowFiValues);
+	pair<vector<double>, vector<double> > lccs = calculateLocalCorrelations(biFunction_, 0.2, {0.5, 0.9}, locations, highFiValues, lowFiValues);
 	
-	double LCC_4_rel = lccs.second[0];
-	double LCC_95_rel = lccs.second[1];
+	double LCC_5_rel = lccs.second[0];
+	double LCC_9_rel = lccs.second[1];
 	double brh = locations.size() / (double)biFunction_->d_;
 	double br = locations.size() / (double)sampledPointsLow_.size();
 
 	// Ok I think I have it all! Print them and make a decision
-	if(printInfo_){printf("Have feature values of Brh %.2f, Br %.2f, LCC_0.4 %.2f, LCC_0.95 %.2f and R2_L %.2f\n", brh, br, LCC_4_rel, LCC_95_rel, adjustedR2);}
+	if(printInfo_){printf("Have feature values of Brh %.2f, Br %.2f, LCC_0.5 %.2f, LCC_0.9 %.2f and R2_LI %.2f\n", brh, br, LCC_5_rel, LCC_9_rel, adjustedR2);}
 
 	if(!advanced_){
 
-		if(brh >= 18 || br >= 1 || LCC_4_rel <= 0.7){
+		if(brh >= 20 || br >= 1 || LCC_5_rel <= 0.7){
 			if(printInfo_){printf("Instance belongs to first group, should NOT use low fi function.\n");}
 			lowFiDataIsUseful_ = false;
-		}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
+		}else if(LCC_9_rel >= 0.8 || adjustedR2 >= 0.6){
 			if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
 			lowFiDataIsUseful_ = true;
-		}else if(brh <= 5){
+		}else if(brh <= 6){
 			if(printInfo_){printf("Instance belongs to third group and have little high fi data, should use low fi function.\n");}
 			lowFiDataIsUseful_ = true;
 		}else{
@@ -1845,15 +1833,15 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	
 	}else{
 		// Ok so idea is to base decisions of brh also on previous decisions of low fi data usefulness
-		if(br >= 1 || LCC_4_rel <= 0.7){
+		if(br >= 1 || LCC_5_rel <= 0.7){
 			if(printInfo_){printf("Instance belongs to first group (not based on brh), should NOT use low fi function.\n");}
 			lowFiDataIsUseful_ = false;
 		
-		}else if(brh >= 18 && !lowFiDataIsUseful_){
+		}else if(brh >= 20 && !lowFiDataIsUseful_){
 			if(printInfo_){printf("Instance belongs to first group based on Brh and in previous iteration did not use low fi, should NOT use low fi function.\n");}
 			lowFiDataIsUseful_ = false;
 		
-		}else if(LCC_95_rel >= 0.5 || adjustedR2 >= 0.4){
+		}else if(LCC_9_rel >= 0.8 || adjustedR2 >= 0.6){
 			if(printInfo_){printf("Instance belongs to second group, should use low fi function.\n");}
 			lowFiDataIsUseful_ = true;
 		}else{
@@ -1929,9 +1917,10 @@ tuple<VectorXd, double, bool, bool> AdaptiveCoKriging::findNextSampleSite(){
 
 
 AdaptiveCoKriging::leastSquaresFunction::leastSquaresFunction(int d, vector<VectorXd> points, vector<double> values):
-	Function(d, -100, 100),
+	Function(1 + d + d * (d-1)/2, -100, 100),
 	points_(points),
-	values_(values){}
+	values_(values),
+	modelFunctionDimension_(d){}
 
 AdaptiveCoKriging::leastSquaresFunction::~leastSquaresFunction(){}
 
@@ -1940,9 +1929,21 @@ double AdaptiveCoKriging::leastSquaresFunction::evaluate(VectorXd &point){
 	double sumError = 0;
 	for(int i = 0; i < (int)points_.size(); i++){
 		double prediction = point[0];
-		for(int j = 0; j < (int)points_[0].size(); j++){
-			prediction += point(j + 1) * points_[i](j);
+		int index = 0;
+		for(int j = 0; j < modelFunctionDimension_; j++){
+			index++;
+			prediction += point(index) * points_[i](j);
 		}
+
+		for(int j = 0; j < modelFunctionDimension_ - 1; j++){
+			for(int k = j + 1; k < modelFunctionDimension_; k++){
+				index++;
+				prediction += point(index) * points_[i](j)*points_[i](k);
+			}
+		}
+		// for(int j = 0; j < (int)points_[0].size(); j++){
+		// 	prediction += point(j + 1) * points_[i](j);
+		// }
 		sumError += pow(prediction - values_[i], 2);
 	}
 	return sumError;

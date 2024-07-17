@@ -460,7 +460,9 @@ class AdaptiveCoKriging: public CoKriging{
 	// Finds the location of the next sampling site, based on an already specified acquisition function
 	virtual tuple<VectorXd, double, bool, bool> findNextSampleSite() override;
 
-	// Function used to train a simple regression model by least squares regression.
+	// Function used to train a simple regression model (linear with interactions) by least squares regression.
+	// Note that the input d is the input of the dimension of the function being modelled; the actual number
+	// of variables is 1 + d + d(d-1) i.e. the intersection, the number of variables and the number of interactions.
 	class leastSquaresFunction : public Function{
 	public:
 
@@ -472,6 +474,7 @@ class AdaptiveCoKriging: public CoKriging{
 
 		vector<VectorXd> points_;
 		vector<double> values_;
+		double modelFunctionDimension_;
 	};
 
 
