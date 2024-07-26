@@ -494,6 +494,11 @@ VectorXd HeavyTuneSolver::optimise(){
 	currentBestPoint = amoeba->optimise(secondPassAmoebaPoints, secondPassAmoebaVals);
 	usedBudget += amoeba->evalsUsed_;
 	delete amoeba;
+	// It is possible for these two passes to have exhausted the budget, if so end here
+	if(usedBudget >= maxEval_){
+		if(printInfo_){printf("Exhausted whole budget on AMOEBA search, stopping here!\n");}
+		return currentBestPoint;
+	}
 
 	// Work out how to divide the rest of the sample budget
 	int gaBudget, dhcBudget;
@@ -567,6 +572,12 @@ VectorXd RandomHeavyTuneSolver::optimise(){
 	currentBestPoint = amoeba->optimise(secondPassAmoebaPoints, secondPassAmoebaVals);
 	usedBudget += amoeba->evalsUsed_;
 	delete amoeba;
+	// It is possible for these two passes to have exhausted the budget, if so end here
+	if(usedBudget >= maxEval_){
+		if(printInfo_){printf("Exhausted whole budget on AMOEBA search, stopping here!\n");}
+		return currentBestPoint;
+	}
+
 
 	// Work out how to divide the rest of the sample budget
 	int arsBudget, dhcBudget;

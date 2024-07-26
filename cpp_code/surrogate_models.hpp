@@ -474,7 +474,7 @@ class AdaptiveCoKriging: public CoKriging{
 
 		vector<VectorXd> points_;
 		vector<double> values_;
-		double modelFunctionDimension_;
+		int modelFunctionDimension_;
 	};
 
 

@@ -1773,6 +1773,9 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	if(printInfo_){printf("Assessing low fidelity function. Calculate Adjusted R^2 for a linear model with interactions.\n");}
 	leastSquaresFunction* function = new leastSquaresFunction(d, locations, differences);
 	auxSolver_->updateProblem(function, true);
+	// It is possible for this model to have a lot of coefficients (for d = 20, have 211 coefficients)
+	// Evaluating the performance of a set of coefficients can be done very quickly though, so for d > 10 double the budget
+
 	VectorXd coefficients = auxSolver_->optimise();
 	// Now want the mean, sum of squares, and sum of residuals
 	double mean = 0;
@@ -1799,8 +1802,6 @@ void AdaptiveCoKriging::assessLowFiFunction(){
 	// Otherwise can use formula
 	else{adjustedR2 = 1 - (((double)n - 1) / ((double)n - d - 1)) * (ssRes / ssReg);}
 	
-	
-
 	// Ok so need sample to be unscaled when passing it to calculateLocalCorrelations, as the function scales internally
 	unscalePoints(locations);
 	unscaleObservations(highFiValues);
@@ -1941,9 +1942,6 @@ double AdaptiveCoKriging::leastSquaresFunction::evaluate(VectorXd &point){
 				prediction += point(index) * points_[i](j)*points_[i](k);
 			}
 		}
-		// for(int j = 0; j < (int)points_[0].size(); j++){
-		// 	prediction += point(j + 1) * points_[i](j);
-		// }
 		sumError += pow(prediction - values_[i], 2);
 	}
 	return sumError;
