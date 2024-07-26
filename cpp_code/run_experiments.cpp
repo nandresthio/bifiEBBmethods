@@ -517,8 +517,7 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 
 		if(surrogateName.compare("kriging") == 0){printf("Generating Kriging sample with %d low-fidelity samples and %d high-fidelity samples, note low-fi samples will not be used.\n", initialSampleSizeLow, initialSampleSize);}
 		if(surrogateName.compare("cokriging") == 0){printf("Generating Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
-		if(surrogateName.compare("adaptiveCokriging") == 0){printf("Generating Adaptive Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
-		if(surrogateName.compare("adaptiveCokrigingAdvanced") == 0){printf("Generating Adaptive Co-Kriging Advanced sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
+		if(surrogateName.compare("rulesCokriging") == 0){printf("Generating Rules-based Co-Kriging sample with %d low-fidelity samples and %d high-fidelity samples.\n", initialSampleSizeLow, initialSampleSize);}
 		
 
 		// New way, ignore provided subset in case it is of a non optimise low-fidelity sample
@@ -537,6 +536,9 @@ void assessSurrogateModelWithBudget(string outputFilename, string problemType, s
 		return;
 	}
 	delete sampleGenerator;
+
+	printf("\n\nDone saving sample!!\n\n\n");
+
 
 	model->saveSample(sampledPoints, sampledPointsLow, sampledPointsValues, sampledPointsValuesLow);
 
