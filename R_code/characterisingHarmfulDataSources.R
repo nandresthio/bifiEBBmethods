@@ -279,13 +279,13 @@ sum(temp[, 2] == 1)/nrow(temp)
 
 
 # Testing happens now, calculate precision and whatnot
-name <- "CorrTol0.001Bad"
-algorithmOriginalBin <- read.table(paste0("matlab_code/ISA/", name, "/algorithm_binary_user.csv"), header = TRUE, sep = ",")
-algorithmRaw <- read.table(paste0("matlab_code/ISA/", name, "/algorithm_raw.csv"), header = TRUE, sep = ",")
-algorithmBin <- read.table(paste0("matlab_code/ISA/", name, "/algorithm_bin.csv"), header = TRUE, sep = ",")
-predictions <- read.table(paste0("matlab_code/ISA/", name, "/algorithm_svm.csv"), header = TRUE, sep = ",")
-portfolio <- read.table(paste0("matlab_code/ISA/", name, "/portfolio.csv"), header = TRUE, sep = ",")
-portfolioPrediction <- read.table(paste0("matlab_code/ISA/", name, "/portfolio_svm.csv"), header = TRUE, sep = ",")
+path <- "data/characterisingHarmfulDataSourcesISA/"
+algorithmOriginalBin <- read.table(paste0(path, "/algorithm_binary_user.csv"), header = TRUE, sep = ",")
+algorithmRaw <- read.table(paste0(path, "/algorithm_raw.csv"), header = TRUE, sep = ",")
+algorithmBin <- read.table(paste0(path, "/algorithm_bin.csv"), header = TRUE, sep = ",")
+predictions <- read.table(paste0(path, "/algorithm_svm.csv"), header = TRUE, sep = ",")
+portfolio <- read.table(paste0(path, "/portfolio.csv"), header = TRUE, sep = ",")
+portfolioPrediction <- read.table(paste0(path, "/portfolio_svm.csv"), header = TRUE, sep = ",")
 # Kriging
 print(paste0("Kriging, probability of good ", 100*sum(algorithmBin$kriging) / nrow(algorithmBin), "%"))
 print(paste0("Kriging SVM, probability of good ", 100*sum(algorithmBin$kriging == predictions$kriging) / nrow(algorithmBin), "%"))
@@ -316,16 +316,22 @@ print(paste0("CoKriging SVM 'inverse' recall ",  trueNegatives / (trueNegatives 
     sum(algorithmBin[portfolioPrediction$Best_Algorithm == 0, "kriging"] == 1))/nrow(portfolio)
 
 
+# Propotion of instances with no predicted algorithm for which Kriging is good
+(sum(algorithmBin[portfolioPrediction$Best_Algorithm == 0, "kriging"] == 1))/sum(portfolioPrediction$Best_Algorithm == 0)
+# Propotion of instances with no predicted algorithm for which Co-Kriging is good
+(sum(algorithmBin[portfolioPrediction$Best_Algorithm == 0, "cokriging"] == 1))/sum(portfolioPrediction$Best_Algorithm == 0)
+
+
 # Finally, in order to derive simple rules, create some plots which analyse when
 # each of the techniques should be used.
 # Get the "real" feature value
-name <- "CorrTol0.001Bad"
+path <- "data/characterisingHarmfulDataSourcesISA/"
 preProcessedFeatures <- read.table("data/features/sampleAndRealFeaturesClean.txt", header = TRUE, sep = " ")
 preProcessedFeatures$instanceName <- paste0(gsub('[(]', '', sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 1)), "_",
                                             sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 2), "_",
                                             sapply(strsplit(preProcessedFeatures$instances, ","), "[[", 3))
 
-projection <- read.table(paste0("matlab_code/ISA/", name, "/projection_matrix.csv"), header = TRUE, sep = ",")
+projection <- read.table(paste0(path, "/projection_matrix.csv"), header = TRUE, sep = ",")
 
 featuresOfInterest <- paste0("feature_", colnames(projection[-1]))
 # Add highFiBudgetRatio and CC 
@@ -349,7 +355,7 @@ for(feat in featuresOfInterest){
 }
 # For adjusted R^2, whenever the feature is below 0 simply set it to 0
 dataOfInterest[dataOfInterest$original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2 < 0, 'original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2'] <- 0
-write.table(dataOfInterest, paste0("matlab_code/ISA/", name, "/metadataAllFeatures.csv"), sep=",", quote = FALSE, row.names = FALSE)
+write.table(dataOfInterest, paste0(path, "/metadataAllFeatures.csv"), sep=",", quote = FALSE, row.names = FALSE)
 feats <- paste0("original_", featuresOfInterest)
 # Now get data into a format that ggplot will use
 # For each of the intervals, find the proportion of instances for which
@@ -412,7 +418,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_budgetRatio
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodBudgetRatio.png"), width = 3.5, height = 3.5)
+ggsave(paste0(path,"/custom_proportionGoodBudgetRatio.png"), width = 3.5, height = 3.5)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_highFiBudgetRatio", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -422,7 +428,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_highFiBudge
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodHighFiBudgetRatio.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodHighFiBudgetRatio.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_5", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -432,7 +438,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_5"
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodLCC5.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodLCC5.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_9", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -442,7 +448,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_LCCrel_0_9"
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.2, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodLCC9.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodLCC9.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_LCC_sd", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -452,7 +458,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_LCC_sd", ],
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodLCCsd.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodLCCsd.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_meta_lin_w_interact_adj_r2", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -462,7 +468,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_ela_met
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodR2LI.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodR2LI.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_nbc_nb_fitness_cor", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -472,7 +478,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_mid_nbc_nb_
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodNBC.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodNBC.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_CC", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -482,7 +488,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_CC", ], aes
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodCC.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodCC.png"), width = 4, height = 4)
 
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ela_level_mmce_lda_50", ], aes(x=xVals, y=proportion, group=Method)) +
@@ -493,7 +499,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ela_le
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodMMCElda.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodMMCElda.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_RRMSE", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -503,7 +509,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_RRMSE", ], 
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodRRMSE.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodRRMSE.png"), width = 4, height = 4)
 
 ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ic_m0", ], aes(x=xVals, y=proportion, group=Method)) +
   geom_line(aes(linetype=Method))+
@@ -513,7 +519,7 @@ ggplot(plottingData[plottingData$feature == "original_feature_sample_high_ic_m0"
   ylab("Proportion of instances with good performance") +
   theme_bw() +
   theme(legend.position = c(0.8, 0.2))
-ggsave(paste0("matlab_code/ISA/", name ,"/custom_proportionGoodM0.png"), width = 4, height = 4)
+ggsave(paste0(path,"/custom_proportionGoodM0.png"), width = 4, height = 4)
 
 
 
@@ -612,6 +618,6 @@ rulesBasedPredictor[!(rulesBasedPredictor$Row %in% chooseCoKrig$instances) &
                       !(rulesBasedPredictor$Row %in% chooseKrig$instances), "Best_Algorithm"] <- 0
 
 nrow(chooseKrig) + nrow(chooseCoKrig)
-write.table(rulesBasedPredictor[2], paste0("matlab_code/ISA/", name, "/rulesSelector.csv"), sep=",", quote = FALSE, row.names = FALSE)
+write.table(rulesBasedPredictor[2], paste0(path, "/rulesSelector.csv"), sep=",", quote = FALSE, row.names = FALSE)
 
 
